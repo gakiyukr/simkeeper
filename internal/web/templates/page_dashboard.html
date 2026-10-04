@@ -7,25 +7,26 @@
 
 <div class="card">
   <div class="card-header row">
-    <div><h2 class="card-title">我的号码</h2></div>
-    <a class="btn btn-sm" href="/numbers/new">{{template "ico_plus"}}添加号码</a>
+    <div>
+      <h2 class="card-title">即将到期</h2>
+      <p class="card-desc">活跃号码按到期日排序{{if gt .Content.More 0}}（仅显示最早的前 {{len .Content.Upcoming}} 个）{{end}}</p>
+    </div>
+    <a class="btn btn-outline btn-sm" href="/numbers">{{template "ico_phone"}}管理号码</a>
   </div>
   <div class="card-content flush">
-    {{if not .Content.Numbers}}
+    {{if not .Content.Upcoming}}
     <div class="empty">还没有添加任何号码。先去<a class="link" href="/numbers/new">添加一个</a>，再到<a class="link" href="/notifications/config">通知配置</a>里启用提醒渠道。</div>
     {{else}}
     <div class="tbl-wrap">
       <table class="tbl">
-        <thead><tr><th>号码</th><th>国家 / 运营商</th><th>到期日</th><th>剩余</th><th class="muted">提醒窗口</th><th style="text-align:right">操作</th></tr></thead>
+        <thead><tr><th>号码</th><th>国家 / 运营商</th><th>到期日</th><th>剩余</th></tr></thead>
         <tbody>
-          {{range .Content.Numbers}}
+          {{range .Content.Upcoming}}
           <tr>
             <td class="mono-strong">{{.PhoneNumber}}</td>
-            <td>{{.CountryName}}<br><small class="muted">{{.Carrier}}</small></td>
+            <td>{{.CountryName}}{{if .Carrier}}<span class="muted"> · {{.Carrier}}</span>{{end}}</td>
             <td>{{.ExpiryDate}}</td>
             <td><span class="badge {{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span></td>
-            <td class="muted"><small>续费 {{.RenewalDaysBefore}} 天 · 使用 {{.UsageDaysBefore}} 天</small></td>
-            <td style="text-align:right"><a class="btn btn-sm btn-outline" href="/numbers/{{.ID}}/edit">编辑</a></td>
           </tr>
           {{end}}
         </tbody>
@@ -33,14 +34,17 @@
     </div>
     {{end}}
   </div>
+  {{if gt .Content.More 0}}
   <div class="card-footer" style="justify-content:flex-end">
-    <a href="/notifications" class="muted" style="font-size:.8125rem">查看全部通知 →</a>
+    <a href="/numbers" class="muted" style="font-size:.8125rem">还有 {{.Content.More}} 个号码，见号码管理 →</a>
   </div>
+  {{end}}
 </div>
 
 <div class="card">
   <div class="card-header row">
     <div><h2 class="card-title">最近通知</h2></div>
+    <a href="/notifications" class="muted" style="font-size:.8125rem">全部历史 →</a>
   </div>
   <div class="card-content flush">
     {{if not .Content.RecentNotifs}}

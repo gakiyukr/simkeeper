@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -89,7 +90,8 @@ func normalizePhone(raw string) string {
 
 // DashPage 首页仪表盘数据。
 type DashPage struct {
-	Numbers      []store.PhoneNumber
+	Upcoming     []store.PhoneNumber // 即将到期摘要：活跃号码按到期日升序前 N 个
+	More         int                 // 未在摘要中展示的活跃号码数
 	Total        int
 	Expiring7    int // 7 天内到期（含今天）
 	ActiveCnt    int
@@ -97,7 +99,10 @@ type DashPage struct {
 	RecentNotifs []store.Notification
 }
 
-// HandleDashboard 首页：概览 + 即将到期列表。
+// dashUpcomingLimit 概览页即将到期摘要的最大条数；完整管理在号码管理页。
+const dashUpcomingLimit = 5
+
+// HandleDashboard 首页：概览 + 即将到期摘要。
 func (a *App) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 	u := a.currentUser(r)
 	d := a.baseData(r, "概览")
@@ -108,8 +113,9 @@ func (a *App) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "内部错误", http.StatusInternalServerError)
 		return
 	}
-	page := DashPage{Numbers: numbers, Total: len(numbers)}
+	page := DashPage{Total: len(numbers)}
 	today := time.Now()
+	active := make([]store.PhoneNumber, 0, len(numbers))
 	for i := range numbers {
 		days := numbers[i].DaysLeft(today)
 		if days >= 0 && days <= 7 {
@@ -117,8 +123,16 @@ func (a *App) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 		if numbers[i].Status == "active" {
 			page.ActiveCnt++
+			active = append(active, numbers[i])
 		}
 	}
+	// YYYY-MM-DD 文本可直接字典序排序
+	sort.Slice(active, func(i, j int) bool { return active[i].ExpiryDate < active[j].ExpiryDate })
+	if len(active) > dashUpcomingLimit {
+		page.More = len(active) - dashUpcomingLimit
+		active = active[:dashUpcomingLimit]
+	}
+	page.Upcoming = active
 	page.SiteDesc, _ = a.Settings.Get("site_description")
 	page.RecentNotifs, _, _ = a.Notify.ListForUser(u.ID, 1, 5)
 	d.Content = page
