@@ -56,7 +56,7 @@ func Open(driver, dsn string) (*DB, error) {
 		dsn = fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)", dsn)
 	case DialectMySQL, DialectPostgres:
 		if dsn == "" {
-			return nil, fmt.Errorf("驱动 %s 需要 -dsn / BHT_DSN 提供连接串", driver)
+			return nil, fmt.Errorf("驱动 %s 需要 -dsn / SK_DSN 提供连接串", driver)
 		}
 	default:
 		return nil, fmt.Errorf("不支持的数据库驱动 %q（可选：sqlite / mysql / postgres）", driver)

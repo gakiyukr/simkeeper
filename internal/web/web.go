@@ -96,7 +96,7 @@ func (a *App) currentSession(r *http.Request) *auth.Session {
 // Secure 依请求是否为 TLS 决定，不读 X-Forwarded-Proto（修复 PHP 版问题）。
 func (a *App) sessionCookie(r *http.Request, token string, maxAge int) *http.Cookie {
 	return &http.Cookie{
-		Name:     "BHTSESSION",
+		Name:     "SKSESSION",
 		Value:    token,
 		Path:     "/",
 		MaxAge:   maxAge,
@@ -117,7 +117,7 @@ func withCtx(r *http.Request, sess *auth.Session, u *store.User) context.Context
 // 承载 CSRF 令牌，currentUser 对它返回 nil。
 func (a *App) sessionMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if c, err := r.Cookie("BHTSESSION"); err == nil {
+		if c, err := r.Cookie("SKSESSION"); err == nil {
 			if sess, err := a.Sessions.Get(c.Value); err == nil && sess != nil {
 				var u *store.User
 				if sess.UserID > 0 {
@@ -219,9 +219,9 @@ func (a *App) baseData(r *http.Request, title string) pageData {
 // setFlash / takeFlash 用短时效 Cookie 传递一次性提示（PRG 模式）。
 // 值必须 URL 编码：Go 的 SetCookie 会静默丢弃包含非 ASCII 字节（如中文）的 Cookie。
 func (a *App) setFlash(w http.ResponseWriter, msg string, isErr bool) {
-	name := "BHTFLASH"
+	name := "SKFLASH"
 	if isErr {
-		name = "BHTFLASHERR"
+		name = "SKFLASHERR"
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: name, Value: url.QueryEscape(msg), Path: "/",
@@ -241,8 +241,8 @@ func (a *App) takeFlash(r *http.Request) (string, bool) {
 		}
 		return v
 	}
-	if v := read("BHTFLASHERR"); v != "" {
+	if v := read("SKFLASHERR"); v != "" {
 		return v, true
 	}
-	return read("BHTFLASH"), false
+	return read("SKFLASH"), false
 }

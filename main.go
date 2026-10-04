@@ -6,7 +6,7 @@
 //	./baohaotong -driver mysql  -dsn 'user:pass@tcp(127.0.0.1:3306)/baohaotong?charset=utf8mb4'
 //	./baohaotong -driver postgres -dsn 'postgres://user:pass@127.0.0.1:5432/baohaotong?TimeZone=Asia/Shanghai'
 //
-// 对应环境变量：BHT_DRIVER / BHT_DB / BHT_DSN / BHT_ADDR / BHT_TRUST_PROXY / BHT_CRON_INTERVAL。
+// 对应环境变量：SK_DRIVER / SK_DB / SK_DSN / SK_ADDR / SK_TRUST_PROXY / SK_CRON_INTERVAL。
 // 首次启动访问 /setup 创建管理员（创建后入口永久关闭）。
 package main
 
@@ -46,19 +46,19 @@ func main() {
 	}
 
 	var (
-		driver = flag.String("driver", envOr("BHT_DRIVER", db.DialectSQLite),
+		driver = flag.String("driver", envOr("SK_DRIVER", db.DialectSQLite),
 			"数据库驱动：sqlite（默认）/ mysql / postgres")
-		dbPath = flag.String("db", envOr("BHT_DB", "data/baohaotong.db"),
+		dbPath = flag.String("db", envOr("SK_DB", "data/baohaotong.db"),
 			"SQLite 数据库文件路径（仅 driver=sqlite 时使用）")
-		dsn = flag.String("dsn", envOr("BHT_DSN", ""),
+		dsn = flag.String("dsn", envOr("SK_DSN", ""),
 			"MySQL/PostgreSQL 连接串，例如 "+
 				`mysql: 'user:pass@tcp(127.0.0.1:3306)/baohaotong?charset=utf8mb4'；`+
 				`postgres: 'postgres://user:pass@127.0.0.1:5432/baohaotong?TimeZone=Asia/Shanghai'`)
-		addr = flag.String("addr", envOr("BHT_ADDR", "127.0.0.1:8080"),
+		addr = flag.String("addr", envOr("SK_ADDR", "127.0.0.1:8080"),
 			"HTTP 监听地址")
-		trustProxy = flag.Bool("trust-proxy", envOr("BHT_TRUST_PROXY", "") == "1",
+		trustProxy = flag.Bool("trust-proxy", envOr("SK_TRUST_PROXY", "") == "1",
 			"信任 X-Forwarded-For 头（部署在可信反向代理之后时开启，用于登录限流的 IP 归属）")
-		cronInterval = flag.Duration("cron-interval", durationOr("BHT_CRON_INTERVAL", time.Hour),
+		cronInterval = flag.Duration("cron-interval", durationOr("SK_CRON_INTERVAL", time.Hour),
 			"定时任务执行间隔（如 30m、1h）；0 表示禁用进程内调度，仅保留管理后台手动触发")
 	)
 	flag.Parse()
@@ -141,9 +141,9 @@ func envOr(key, fallback string) string {
 func tgLogin(args []string) {
 	fs := flag.NewFlagSet("tg-login", flag.ExitOnError)
 	var (
-		driver = fs.String("driver", envOr("BHT_DRIVER", db.DialectSQLite), "数据库驱动")
-		dbPath = fs.String("db", envOr("BHT_DB", "data/baohaotong.db"), "SQLite 数据库路径")
-		dsn    = fs.String("dsn", envOr("BHT_DSN", ""), "MySQL/PostgreSQL 连接串")
+		driver = fs.String("driver", envOr("SK_DRIVER", db.DialectSQLite), "数据库驱动")
+		dbPath = fs.String("db", envOr("SK_DB", "data/baohaotong.db"), "SQLite 数据库路径")
+		dsn    = fs.String("dsn", envOr("SK_DSN", ""), "MySQL/PostgreSQL 连接串")
 		user   = fs.String("username", "", "要登录哪个用户的 TG 电话渠道（登录页用的用户名）")
 	)
 	_ = fs.Parse(args)
