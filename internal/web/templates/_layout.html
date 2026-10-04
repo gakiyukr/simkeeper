@@ -1,0 +1,93 @@
+{{define "head"}}<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="csrf-token" content="{{.CSRFToken}}">
+<title>{{.Title}} · {{.SiteName}}</title>
+<style>
+:root{--p:#4f46e5;--p2:#7c3aed;--bg:#f5f6fa;--card:#fff;--line:#e5e7eb;--txt:#1f2937;--muted:#6b7280;--ok:#059669;--warn:#d97706;--err:#dc2626}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--txt);font-size:15px;line-height:1.55}
+a{color:var(--p);text-decoration:none}.muted{color:var(--muted)}
+.nav{background:linear-gradient(135deg,var(--p),var(--p2));color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.nav-inner{max-width:1080px;margin:0 auto;display:flex;align-items:center;gap:1rem;padding:.7rem 1rem;flex-wrap:wrap}
+.brand{color:#fff;font-weight:700;font-size:1.05rem}
+.nav-links{display:flex;gap:.2rem;flex:1;flex-wrap:wrap}
+.nav-links a{color:rgba(255,255,255,.85);padding:.35rem .7rem;border-radius:6px;font-size:.92rem}
+.nav-links a.active,.nav-links a:hover{background:rgba(255,255,255,.18);color:#fff}
+.nav-right{display:flex;align-items:center;gap:.75rem;font-size:.9rem}.nav-right a{color:rgba(255,255,255,.9)}
+.container{max-width:1080px;margin:1.2rem auto;padding:0 1rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:1.1rem}
+.card-h{display:flex;justify-content:space-between;align-items:center;padding:.8rem 1rem;border-bottom:1px solid var(--line);font-weight:600}
+.card-b{padding:1rem;overflow-x:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.1rem}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1rem;text-align:center}
+.stat .num{font-size:1.7rem;font-weight:700}.stat.warn .num{color:var(--warn)}.stat.err .num{color:var(--err)}.stat.ok .num{color:var(--ok)}
+table{width:100%;border-collapse:collapse;font-size:.92rem}
+th,td{padding:.55rem .6rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:.15rem .55rem;border-radius:999px;font-size:.78rem;font-weight:600;white-space:nowrap}
+.badge-ok{background:#d1fae5;color:#065f46}.badge-warning{background:#fef3c7;color:#92400e}.badge-danger{background:#fee2e2;color:#991b1b}.badge-muted{background:#e5e7eb;color:#4b5563}
+.alert{padding:.7rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:.92rem}
+.alert-err{background:#fee2e2;color:#991b1b}.alert-ok{background:#d1fae5;color:#065f46}
+.btn{display:inline-block;background:var(--p);color:#fff;border:none;border-radius:8px;padding:.5rem 1rem;font-size:.9rem;cursor:pointer}
+.btn:hover{opacity:.9}.btn-sm{padding:.3rem .7rem;font-size:.82rem}.btn-danger{background:var(--err)}.btn-ghost{background:#fff;color:var(--p);border:1px solid var(--p)}
+.link{background:none;border:none;color:var(--p);cursor:pointer;padding:0;font-size:.9rem}
+.inline{display:inline}
+fieldset{border:1px solid var(--line);border-radius:8px;margin:0 0 1rem}
+legend{padding:0 .4rem;font-size:.86rem;color:var(--muted)}
+.field{margin-bottom:.9rem}
+label{display:block;font-size:.86rem;color:var(--muted);margin-bottom:.25rem}
+input[type=text],input[type=password],input[type=email],input[type=number],input[type=date],select,textarea{width:100%;padding:.5rem .65rem;border:1px solid var(--line);border-radius:8px;font-size:.92rem;font-family:inherit;background:#fff;color:var(--txt)}
+textarea{min-height:70px;resize:vertical}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem}
+.check{display:flex;align-items:center;gap:.4rem;font-size:.92rem;color:var(--txt)}
+.check input{width:auto}
+.pager{display:flex;gap:.8rem;align-items:center;justify-content:center;padding:.8rem;font-size:.9rem}
+.footer{text-align:center;color:var(--muted);font-size:.82rem;padding:1.5rem 0 2rem}
+pre.msg{white-space:pre-wrap;font-size:.84rem;margin:0;font-family:inherit}
+.actions{display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap}
+.auth-wrap{max-width:880px;margin:2.5rem auto}
+@media(max-width:720px){.row2,.row3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="/">📶 {{.SiteName}}</a>
+    <div class="nav-links">
+      {{if .User}}
+      <a href="/" class="{{if eq .ActiveNav ""}}active{{end}}">概览</a>
+      <a href="/numbers" class="{{if eq .ActiveNav "numbers"}}active{{end}}">号码管理</a>
+      <a href="/notifications" class="{{if eq .ActiveNav "notifications"}}active{{end}}">通知历史</a>
+      <a href="/notifications/config" class="{{if eq .ActiveNav "notify"}}active{{end}}">通知配置</a>
+      {{if eq .User.Role "admin"}}<a href="/admin" class="{{if hasPrefix .ActiveNav "admin"}}active{{end}}">管理后台</a>{{end}}
+      {{end}}
+    </div>
+    <div class="nav-right">
+      {{if .User}}
+      <span>{{.User.Username}}</span>
+      <a href="/profile">个人设置</a>
+      <form method="post" action="/logout" class="inline">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="link" style="color:rgba(255,255,255,.9)">退出</button>
+      </form>
+      {{else}}
+      <a href="/login">登录</a>
+      {{end}}
+    </div>
+  </div>
+</nav>
+{{if .Flash}}<div class="container"><div class="alert {{if .FlashIsErr}}alert-err{{else}}alert-ok{{end}}">{{.Flash}}</div></div>{{end}}
+<main class="container">
+{{end}}
+
+{{define "foot"}}
+</main>
+<footer class="footer">{{.SiteName}} · eSIM / 手机号保号到期提醒 · {{.Year}}</footer>
+</body>
+</html>
+{{end}}

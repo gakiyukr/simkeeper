@@ -1,0 +1,111 @@
+{{define "page_number_form"}}{{template "head" .}}
+{{$N := .Content.N}}
+<form method="post" action="{{if $N}}/numbers/{{$N.ID}}/edit{{else}}/numbers/new{{end}}">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  <div class="card">
+    <div class="card-h">{{if $N}}编辑号码 {{$N.PhoneNumber}}{{else}}添加号码{{end}}</div>
+    <div class="card-b">
+      <div class="row2">
+        <div class="field">
+          <label>手机号码（含国际区号，自动补 +）</label>
+          <input type="text" name="phone_number" placeholder="+8613800138000"
+                 value="{{with $N}}{{.PhoneNumber}}{{end}}" required>
+        </div>
+        <div class="field">
+          <label>国家 / 地区</label>
+          <select name="country_code" required>
+            <option value="">请选择…</option>
+            {{range .Content.Countries}}
+            <option value="{{.Code}}" {{if eq $.Content.Country .Code}}selected{{end}}>{{.Name}}（{{.Code}}）</option>
+            {{end}}
+          </select>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label>运营商（可选，从下拉候选选或直接输入）</label>
+          <input type="text" name="carrier" list="carrier-list" value="{{with $N}}{{.Carrier}}{{end}}">
+          <datalist id="carrier-list">
+            {{range .Content.Carriers}}<option value="{{.}}">{{end}}
+          </datalist>
+        </div>
+        <div class="field">
+          <label>到期日期{{if $N}}（启用自动续期时以此字段为准重新计算）{{end}}</label>
+          <input type="date" name="expiry_date" value="{{with $N}}{{.ExpiryDate}}{{end}}">
+        </div>
+      </div>
+
+      <div class="row3">
+        <div class="field">
+          <label>建议充值金额（可选）</label>
+          <input type="number" step="0.01" min="0" name="recharge_amount"
+                 value="{{with $N}}{{if gt .RechargeAmount 0.0}}{{.RechargeAmount}}{{end}}{{end}}">
+        </div>
+        <div class="field">
+          <label>币种</label>
+          <input type="text" name="recharge_currency" maxlength="8"
+                 value="{{with $N}}{{.RechargeCurrency}}{{else}}USD{{end}}">
+        </div>
+        <div class="field">
+          <label>备注（可选）</label>
+          <textarea name="notes">{{with $N}}{{.Notes}}{{end}}</textarea>
+        </div>
+      </div>
+
+      <fieldset>
+        <legend>提醒窗口（每个号码独立设置，按运营商规则调整）</legend>
+        <div class="row2">
+          <div class="field">
+            <label>续费提醒提前天数（1-90，默认 7）</label>
+            <input type="number" min="1" max="90" name="renewal_days_before"
+                   value="{{with $N}}{{.RenewalDaysBefore}}{{else}}7{{end}}">
+          </div>
+          <div class="field">
+            <label>使用提醒提前天数（1-90，默认 3）</label>
+            <input type="number" min="1" max="90" name="usage_days_before"
+                   value="{{with $N}}{{.UsageDaysBefore}}{{else}}3{{end}}">
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>自动续期（固定周期号码：到期日 = 起始日 + 周期，到期后自动顺延下一周期）</legend>
+        <div class="field check">
+          <input type="checkbox" id="auto-enable" name="auto_expiry_enabled" value="1"
+                 {{if $N}}{{if $N.AutoExpiryEnabled}}checked{{end}}{{end}}>
+          <label for="auto-enable" style="margin:0">启用自动计算到期时间</label>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>起始日期</label>
+            <input type="date" name="auto_start_date" value="{{with $N}}{{.AutoStartDate}}{{end}}">
+          </div>
+          <div class="field">
+            <label>周期</label>
+            <select name="auto_expiry_period">
+              <option value="">不启用</option>
+              <option value="90" {{if $N}}{{if eq $N.AutoExpiryPeriod 90}}selected{{end}}{{end}}>90 天</option>
+              <option value="180" {{if $N}}{{if eq $N.AutoExpiryPeriod 180}}selected{{end}}{{end}}>180 天</option>
+              <option value="365" {{if $N}}{{if eq $N.AutoExpiryPeriod 365}}selected{{end}}{{end}}>365 天</option>
+            </select>
+          </div>
+        </div>
+      </fieldset>
+
+      {{if $N}}
+      <div class="field">
+        <label>状态（停用后不再纳入提醒）</label>
+        <select name="status">
+          <option value="active" {{if ne $N.Status "inactive"}}selected{{end}}>使用中</option>
+          <option value="inactive" {{if eq $N.Status "inactive"}}selected{{end}}>已停用</option>
+        </select>
+      </div>
+      {{end}}
+
+      <button type="submit" class="btn">{{if $N}}保存修改{{else}}添加号码{{end}}</button>
+      <a class="btn btn-ghost" href="/numbers">取消</a>
+    </div>
+  </div>
+</form>
+{{template "foot" .}}{{end}}

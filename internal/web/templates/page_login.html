@@ -1,0 +1,50 @@
+{{define "page_login"}}{{template "head" .}}
+<div class="auth-wrap">
+  <div class="card">
+    <div class="card-h">登录</div>
+    <div class="card-b">
+      <form method="post" action="/login">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="field">
+          <label>用户名</label>
+          <input type="text" name="username" required autofocus>
+        </div>
+        <div class="field">
+          <label>密码</label>
+          <input type="password" name="password" required>
+        </div>
+        <button type="submit" class="btn" style="width:100%">登录</button>
+      </form>
+    </div>
+  </div>
+
+  {{if .AllowReg}}
+  <div class="card">
+    <div class="card-h">注册</div>
+    <div class="card-b">
+      <form method="post" action="/login">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <input type="hidden" name="register" value="1">
+        <div class="field">
+          <label>用户名（中英文、数字、下划线、连字符）</label>
+          <input type="text" name="reg_username" required>
+        </div>
+        <div class="field">
+          <label>邮箱</label>
+          <input type="email" name="reg_email" required>
+        </div>
+        <div class="field">
+          <label>密码（至少 8 位）</label>
+          <input type="password" name="reg_password" required>
+        </div>
+        <div class="field">
+          <label>确认密码</label>
+          <input type="password" name="reg_confirm_password" required>
+        </div>
+        <button type="submit" class="btn btn-ghost" style="width:100%">注册</button>
+      </form>
+    </div>
+  </div>
+  {{end}}
+</div>
+{{template "foot" .}}{{end}}

@@ -1,0 +1,30 @@
+{{define "page_setup"}}{{template "head" .}}
+<div class="auth-wrap">
+  <div class="card">
+    <div class="card-h">初始化 · 创建管理员</div>
+    <div class="card-b">
+      <p class="muted">系统还没有任何账号。这是唯一一次创建管理员的机会：设置完成后本页面将永久关闭。</p>
+      <form method="post" action="/setup">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="field">
+          <label>管理员用户名</label>
+          <input type="text" name="username" required autofocus>
+        </div>
+        <div class="field">
+          <label>邮箱</label>
+          <input type="email" name="email" required>
+        </div>
+        <div class="field">
+          <label>密码（至少 8 位）</label>
+          <input type="password" name="password" required>
+        </div>
+        <div class="field">
+          <label>确认密码</label>
+          <input type="password" name="confirm_password" required>
+        </div>
+        <button type="submit" class="btn" style="width:100%">创建管理员并进入登录页</button>
+      </form>
+    </div>
+  </div>
+</div>
+{{template "foot" .}}{{end}}

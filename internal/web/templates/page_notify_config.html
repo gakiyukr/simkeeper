@@ -1,0 +1,257 @@
+{{define "page_notify_config"}}{{template "head" .}}
+{{$C := .Content.Cfg}}
+<form method="post" action="/notifications/config" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+  <div class="card">
+    <div class="card-h">邮件（SMTP）</div>
+    <div class="card-b">
+      <div class="field check">
+        <input type="checkbox" id="email_enabled" name="email_enabled" value="1"
+               {{if $C}}{{if $C.EmailEnabled}}checked{{end}}{{end}}>
+        <label for="email_enabled" style="margin:0">启用邮件提醒</label>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>SMTP 服务器（如 smtp.gmail.com）</label>
+          <input type="text" name="email_smtp_host" value="{{with $C}}{{.EmailSMTPHost}}{{end}}">
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>端口</label>
+            <input type="number" name="email_smtp_port" value="{{with $C}}{{.EmailSMTPPort}}{{else}}587{{end}}">
+          </div>
+          <div class="field">
+            <label>加密方式</label>
+            <select name="email_smtp_secure">
+              <option value="tls" {{if $C}}{{if eq $C.EmailSMTPSecure "tls"}}selected{{end}}{{end}}>STARTTLS（587）</option>
+              <option value="ssl" {{if $C}}{{if eq $C.EmailSMTPSecure "ssl"}}selected{{end}}{{end}}>SSL（465）</option>
+              <option value="none" {{if $C}}{{if eq $C.EmailSMTPSecure "none"}}selected{{end}}{{end}}>不加密</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>SMTP 用户名（通常为完整邮箱）</label>
+          <input type="text" name="email_smtp_username" value="{{with $C}}{{.EmailSMTPUsername}}{{end}}">
+        </div>
+        <div class="field">
+          <label>SMTP 密码 / 授权码</label>
+          <input type="password" name="email_password" autocomplete="new-password"
+                 placeholder="{{if $C}}{{if $C.HasEmailPassword}}已设置——留空保持不变{{else}}多数服务商要求应用专用密码{{end}}{{end}}">
+        </div>
+      </div>
+      <div class="row3">
+        <div class="field">
+          <label>发件人邮箱</label>
+          <input type="email" name="email_from_email" value="{{with $C}}{{.EmailFromEmail}}{{end}}">
+        </div>
+        <div class="field">
+          <label>发件人名称</label>
+          <input type="text" name="email_from_name" value="{{with $C}}{{.EmailFromName}}{{end}}">
+        </div>
+        <div class="field">
+          <label>收件邮箱（留空发到账号邮箱）</label>
+          <input type="email" name="email_to_email" value="{{with $C}}{{.EmailToEmail}}{{end}}">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h">Telegram</div>
+    <div class="card-b">
+      <div class="field check">
+        <input type="checkbox" id="telegram_enabled" name="telegram_enabled" value="1"
+               {{if $C}}{{if $C.TelegramEnabled}}checked{{end}}{{end}}>
+        <label for="telegram_enabled" style="margin:0">启用 Telegram 提醒</label>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Chat ID（@userinfobot 可查询；先给机器人发过一条消息）</label>
+          <input type="text" name="telegram_chat_id" value="{{with $C}}{{.TelegramChatID}}{{end}}">
+        </div>
+        <div class="field">
+          <label>Bot Token（@BotFather 创建）</label>
+          <input type="password" name="telegram_bot_token" autocomplete="new-password"
+                 placeholder="{{if $C}}{{if $C.HasTelegramToken}}已设置——留空保持不变{{end}}{{end}}">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h">WxPusher（微信）</div>
+    <div class="card-b">
+      <div class="field check">
+        <input type="checkbox" id="wxpusher_enabled" name="wxpusher_enabled" value="1"
+               {{if $C}}{{if $C.WxPusherEnabled}}checked{{end}}{{end}}>
+        <label for="wxpusher_enabled" style="margin:0">启用 WxPusher 提醒</label>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>UID（形如 UID_xxxxxxxx）</label>
+          <input type="text" name="wxpusher_uid" value="{{with $C}}{{.WxPusherUID}}{{end}}">
+        </div>
+        <div class="field">
+          <label>App Token（wxpusher.zjiecode.com 创建应用获取）</label>
+          <input type="password" name="wxpusher_app_token" autocomplete="new-password"
+                 placeholder="{{if $C}}{{if $C.HasWxPusherToken}}已设置——留空保持不变{{end}}{{end}}">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h">飞书</div>
+    <div class="card-b">
+      <div class="field check">
+        <input type="checkbox" id="feishu_enabled" name="feishu_enabled" value="1"
+               {{if $C}}{{if $C.FeishuEnabled}}checked{{end}}{{end}}>
+        <label for="feishu_enabled" style="margin:0">启用飞书提醒</label>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>群机器人 Webhook（群设置 → 群机器人 → 自定义机器人）</label>
+          <input type="password" name="feishu_webhook" autocomplete="new-password"
+                 placeholder="{{if $C}}{{if $C.HasFeishuWebhook}}已设置——留空保持不变{{else}}https://open.feishu.cn/open-apis/bot/v2/hook/…{{end}}{{end}}">
+        </div>
+        <div class="field">
+          <label>加签密钥（机器人未开签名校验则留空）</label>
+          <input type="password" name="feishu_secret" autocomplete="new-password"
+                 placeholder="{{if $C}}{{if $C.HasFeishuSecret}}已设置——留空保持不变{{end}}{{end}}">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h">钉钉</div>
+    <div class="card-b">
+      <div class="field check">
+        <input type="checkbox" id="dingtalk_enabled" name="dingtalk_enabled" value="1"
+               {{if $C}}{{if $C.DingTalkEnabled}}checked{{end}}{{end}}>
+        <label for="dingtalk_enabled" style="margin:0">启用钉钉提醒</label>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>群机器人 Webhook（群设置 → 机器人 → 自定义机器人）</label>
+          <input type="password" name="dingtalk_webhook" autocomplete="new-password"
+                 placeholder="{{if $C}}{{if $C.HasDingTalkWebhook}}已设置——留空保持不变{{else}}https://oapi.dingtalk.com/robot/send?access_token=…{{end}}{{end}}">
+        </div>
+        <div class="field">
+          <label>加签密钥（安全设置选关键词或 IP 白名单时留空）</label>
+          <input type="password" name="dingtalk_secret" autocomplete="new-password"
+                 placeholder="{{if $C}}{{if $C.HasDingTalkSecret}}已设置——留空保持不变{{end}}{{end}}">
+        </div>
+      </div>
+      <p class="muted" style="font-size:.85rem;margin-bottom:0">
+        钉钉的安全设置为「自定义关键词」时，消息需包含该关键词——建议把关键词设为「保号通」（通知正文自带）。
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h">TG 电话（未接来电闹铃）</div>
+    <div class="card-b">
+      <div class="field check">
+        <input type="checkbox" id="tgcall_enabled" name="tgcall_enabled" value="1"
+               {{if $C}}{{if $C.TGCallEnabled}}checked{{end}}{{end}}>
+        <label for="tgcall_enabled" style="margin:0">
+          提醒触发时呼叫我的 Telegram（铃响后变未接来电）——比消息更难错过
+        </label>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>api_id（my.telegram.org → API development tools）</label>
+          <input type="number" name="tgcall_api_id" value="{{with $C}}{{.TGCallAPIID}}{{end}}">
+        </div>
+        <div class="field">
+          <label>api_hash</label>
+          <input type="password" name="tgcall_api_hash" autocomplete="new-password"
+                 placeholder="{{if $C}}{{if $C.HasTGCallAPIHash}}已设置——留空保持不变{{end}}{{end}}">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>系统 TG 账号手机号（tg-login 验证码登录时需要；用 tdata 导入可留空）</label>
+          <input type="text" name="tgcall_phone" placeholder="+8613800138000"
+                 value="{{with $C}}{{.TGCallPhone}}{{end}}">
+        </div>
+        <div class="field">
+          <label>被叫账号（接电话的你的 TG，@用户名 或手机号）</label>
+          <input type="text" name="tgcall_target" placeholder="@username 或 +8613900139000"
+                 value="{{with $C}}{{.TGCallTarget}}{{end}}">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>导入 tdata（Telegram Desktop 的 tdata 文件夹压缩成 zip 上传，几 KB 即可）</label>
+          <input type="file" name="tgcall_tdata" accept=".zip">
+        </div>
+        <div class="field">
+          <label>桌面端本地密码（桌面端没设置则留空）</label>
+          <input type="password" name="tgcall_tdata_passcode" autocomplete="new-password"
+                 placeholder="{{if $C}}{{if $C.HasTGCallSession}}导入将覆盖现有会话{{end}}{{end}}">
+        </div>
+      </div>
+      <p class="muted" style="font-size:.85rem;margin-bottom:0">
+        登录状态：
+        {{if $C}}{{if $C.HasTGCallSession}}
+        <span class="badge badge-ok">已有会话</span>（tdata 导入或 tg-login 均可更新）
+        {{else}}
+        <span class="badge badge-danger">未登录</span> —— 上传 tdata 导入会话，或在服务器上运行
+        <code>baohaotong tg-login -username 你的用户名</code> 完成一次验证码登录
+        {{end}}{{end}}。
+        两种方式二选一即可；tdata 等同账号完全访问权，请务必经 HTTPS 上传。
+      </p>
+    </div>
+  </div>
+
+  <button type="submit" class="btn">保存配置</button>
+</form>
+
+<div class="card" style="margin-top:1.1rem">
+  <div class="card-h">测试发送</div>
+  <div class="card-b">
+    <p class="muted">向所有已启用渠道各发一条测试消息，结果写进通知历史。密码/令牌留空保存时不会覆盖已存值。</p>
+    <div class="row2">
+      <div class="field">
+        <label>内容预览（可选，附在测试消息里）</label>
+        <input type="text" id="test-preview" placeholder="如：第一个号码的提醒大概长这样">
+      </div>
+      <div class="field" style="align-self:end">
+        <button type="button" class="btn" id="test-send">发送测试通知</button>
+      </div>
+    </div>
+    <pre class="msg" id="test-result" style="display:none"></pre>
+  </div>
+</div>
+
+<script>
+document.getElementById('test-send').addEventListener('click', async function () {
+  const btn = this, out = document.getElementById('test-result');
+  btn.disabled = true; btn.textContent = '发送中…';
+  out.style.display = 'block'; out.textContent = '正在发送…';
+  try {
+    const body = new FormData();
+    const pv = document.getElementById('test-preview').value;
+    if (pv) body.append('preview', pv);
+    const resp = await fetch('/notifications/test', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content },
+      body: body
+    });
+    const data = await resp.json();
+    let text = data.message || (data.success ? '发送成功' : '发送失败');
+    if (data.errors && data.errors.length) text += '\n' + data.errors.join('\n');
+    out.textContent = text;
+  } catch (e) {
+    out.textContent = '请求失败：' + e;
+  } finally {
+    btn.disabled = false; btn.textContent = '发送测试通知';
+  }
+});
+</script>
+{{template "foot" .}}{{end}}

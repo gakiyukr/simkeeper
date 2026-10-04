@@ -1,0 +1,45 @@
+{{define "page_admin_numbers"}}{{template "head" .}}
+<div class="card">
+  <div class="card-h">
+    全部号码（共 {{.Content.Total}} 个）
+    <span style="display:flex;gap:.5rem;align-items:center">
+      <form method="get" action="/admin/numbers" class="inline" style="display:flex;gap:.4rem">
+        <input type="text" name="q" value="{{.Content.Search}}" placeholder="搜索号码 / 国家 / 运营商" style="width:220px">
+        <button type="submit" class="btn btn-sm btn-ghost">搜索</button>
+      </form>
+      <a class="btn btn-sm btn-ghost" href="/admin/export">导出 CSV</a>
+    </span>
+  </div>
+  <div class="card-b">
+    {{if not .Content.Numbers}}
+    <p class="muted" style="text-align:center;margin:.5rem 0">没有匹配的号码</p>
+    {{else}}
+    <table>
+      <thead><tr>
+        <th>号码</th><th>用户ID</th><th>国家 / 运营商</th><th>到期日</th><th>剩余</th><th>状态</th><th class="muted">币种</th>
+      </tr></thead>
+      <tbody>
+        {{range .Content.Numbers}}
+        <tr>
+          <td><code>{{.PhoneNumber}}</code></td>
+          <td class="muted">{{.UserID}}</td>
+          <td>{{.CountryName}}<br><small class="muted">{{.Carrier}}</small></td>
+          <td>{{.ExpiryDate}}</td>
+          <td><span class="badge {{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span></td>
+          <td>{{statusText .Status}}</td>
+          <td class="muted">{{.RechargeCurrency}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{if gt .Content.Pages 1}}
+    <div class="pager">
+      {{if gt .Content.Page 1}}<a href="/admin/numbers?page={{sub .Content.Page 1}}&q={{.Content.Search}}">‹ 上一页</a>{{end}}
+      <span class="muted">第 {{.Content.Page}} / {{.Content.Pages}} 页</span>
+      {{if lt .Content.Page .Content.Pages}}<a href="/admin/numbers?page={{add .Content.Page 1}}&q={{.Content.Search}}">下一页 ›</a>{{end}}
+    </div>
+    {{end}}
+    {{end}}
+  </div>
+</div>
+{{template "foot" .}}{{end}}

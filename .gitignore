@@ -1,0 +1,14 @@
+# 构建产物
+/baohaotong
+/baohaotong.exe
+*.exe
+
+# 运行时数据
+/data/
+/smoketest/
+*.db
+*.db-wal
+*.db-shm
+
+# 测试残留
+*.log

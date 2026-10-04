@@ -1,0 +1,57 @@
+{{define "page_numbers"}}{{template "head" .}}
+<div class="card">
+  <div class="card-h">
+    号码管理（共 {{.Content.Total}} 个）
+    <a class="btn btn-sm" href="/numbers/new">＋ 添加号码</a>
+  </div>
+  <div class="card-b">
+    {{if not .Content.Numbers}}
+    <p class="muted" style="text-align:center;margin:.5rem 0">还没有号码，点击右上角添加。</p>
+    {{else}}
+    <table>
+      <thead><tr>
+        <th>号码</th><th>国家 / 运营商</th><th>到期日</th><th>剩余</th><th>状态</th>
+        <th class="muted">自动续期</th><th style="text-align:right">操作</th>
+      </tr></thead>
+      <tbody>
+        {{range .Content.Numbers}}
+        <tr>
+          <td><code>{{.PhoneNumber}}</code></td>
+          <td>{{.CountryName}}<br><small class="muted">{{.Carrier}}</small></td>
+          <td>{{.ExpiryDate}}</td>
+          <td><span class="badge {{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span></td>
+          <td>{{statusText .Status}}</td>
+          <td>
+            {{if .AutoExpiryEnabled}}
+            <span class="badge badge-ok">{{.AutoExpiryPeriod}} 天周期</span>
+            <form method="post" action="/numbers/{{.ID}}/disable-auto" class="inline">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit" class="link" title="关闭自动续期">关闭</button>
+            </form>
+            {{else}}<span class="muted">—</span>{{end}}
+          </td>
+          <td>
+            <div class="actions">
+              <a class="btn btn-sm btn-ghost" href="/numbers/{{.ID}}/edit">编辑</a>
+              <form method="post" action="/numbers/{{.ID}}/delete" class="inline"
+                    onsubmit="return confirm('确定删除号码 {{.PhoneNumber}} 吗？此操作不可恢复。')">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="btn btn-sm btn-danger">删除</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{if gt .Content.Pages 1}}
+    <div class="pager">
+      {{if gt .Content.Page 1}}<a href="/numbers?page={{sub .Content.Page 1}}">‹ 上一页</a>{{end}}
+      <span class="muted">第 {{.Content.Page}} / {{.Content.Pages}} 页</span>
+      {{if lt .Content.Page .Content.Pages}}<a href="/numbers?page={{add .Content.Page 1}}">下一页 ›</a>{{end}}
+    </div>
+    {{end}}
+    {{end}}
+  </div>
+</div>
+{{template "foot" .}}{{end}}
