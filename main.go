@@ -29,6 +29,7 @@ import (
 
 	"simkeeper/internal/cronjob"
 	"simkeeper/internal/db"
+	"simkeeper/internal/secret"
 	"simkeeper/internal/store"
 	"simkeeper/internal/tgcall"
 	"simkeeper/internal/web"
@@ -60,17 +61,34 @@ func main() {
 			"信任 X-Forwarded-For 头（部署在可信反向代理之后时开启，用于登录限流的 IP 归属；取链最右值，客户端伪造的前缀无效）")
 		secureCookies = flag.Bool("secure-cookies", envOr("SK_SECURE_COOKIES", "") == "1",
 			"会话 Cookie 强制加 Secure 标记（TLS 由反向代理终结时必须开启）")
+		secretKeyFile = flag.String("secret-key-file", envOr("SK_SECRET_KEY_FILE", ""),
+			"凭据加密密钥文件（默认 data/secret.key；设置环境变量 SK_SECRET_KEY 时优先）")
 		cronInterval = flag.Duration("cron-interval", durationOr("SK_CRON_INTERVAL", time.Hour),
 			"定时任务执行间隔（如 30m、1h）；0 表示禁用进程内调度，仅保留管理后台手动触发")
 	)
 	flag.Parse()
 
-	if err := run(*driver, *dbPath, *dsn, *addr, *trustProxy, *secureCookies, *cronInterval); err != nil {
+	if err := run(*driver, *dbPath, *dsn, *addr, *trustProxy, *secureCookies, *secretKeyFile, *cronInterval); err != nil {
 		log.Fatalf("[main] %v", err)
 	}
 }
 
-func run(driver, dbPath, dsn, addr string, trustProxy, secureCookies bool, cronInterval time.Duration) error {
+// secretKeyPath 计算凭据加密密钥文件路径：SQLite 默认与数据库同目录，
+// 其余驱动默认工作目录下的 data/secret.key。显式 flag/环境变量优先。
+func secretKeyPath(driver, dbPath, flagValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	if driver == db.DialectSQLite {
+		return filepath.Join(filepath.Dir(dbPath), "secret.key")
+	}
+	return "data/secret.key"
+}
+
+func run(driver, dbPath, dsn, addr string, trustProxy, secureCookies bool, secretKeyFile string, cronInterval time.Duration) error {
+	if err := secret.Init(secretKeyPath(driver, dbPath, secretKeyFile)); err != nil {
+		return err
+	}
 	if driver == db.DialectSQLite {
 		// SQLite 的「连接串」就是文件路径，目录按需创建
 		if dir := filepath.Dir(dbPath); dir != "" && dir != "." {
@@ -103,6 +121,13 @@ func run(driver, dbPath, dsn, addr string, trustProxy, secureCookies bool, cronI
 	zoneName, offset := time.Now().Zone()
 	log.Printf("[main] 本地时区: %s (UTC%+03d:%02d) — 与预期不符请设置 TZ 环境变量",
 		zoneName, offset/3600, (offset%3600)/60)
+
+	// 历史明文凭据惰性迁移为密文（幂等，无明文时为空操作）
+	if n, err := app.Notify.EncryptPlainConfigs(); err != nil {
+		log.Printf("[main] 历史明文凭据迁移失败: %v", err)
+	} else if n > 0 {
+		log.Printf("[main] 已加密 %d 行渠道凭据", n)
+	}
 
 	if _, total, err := app.Users.List(1, 1, ""); err == nil && total == 0 {
 		log.Printf("[main] 系统还没有账号：请访问 http://%s/setup 创建管理员（创建后入口自动关闭）", addr)
@@ -153,11 +178,15 @@ func tgLogin(args []string) {
 		dbPath = fs.String("db", envOr("SK_DB", "data/simkeeper.db"), "SQLite 数据库路径")
 		dsn    = fs.String("dsn", envOr("SK_DSN", ""), "MySQL/PostgreSQL 连接串")
 		user   = fs.String("username", "", "要登录哪个用户的 TG 电话渠道（登录页用的用户名）")
+		keyFlg = fs.String("secret-key-file", envOr("SK_SECRET_KEY_FILE", ""), "凭据加密密钥文件")
 	)
 	_ = fs.Parse(args)
 	if *user == "" {
 		fmt.Fprintln(os.Stderr, "用法: simkeeper tg-login -username <用户名>")
 		os.Exit(2)
+	}
+	if err := secret.Init(secretKeyPath(*driver, *dbPath, *keyFlg)); err != nil {
+		log.Fatalf("[tg-login] %v", err)
 	}
 
 	database, err := db.Open(*driver, pickDSN(*driver, *dbPath, *dsn))

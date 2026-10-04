@@ -2,9 +2,12 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
+	"log"
 	"time"
 
 	"simkeeper/internal/db"
+	"simkeeper/internal/secret"
 )
 
 // NotifyConfig 对应 notification_configs 表，一行 = 一个用户的全部渠道配置。
@@ -94,12 +97,75 @@ func (r *NotifyRepo) ConfigForUser(userID int64) (*NotifyConfig, error) {
 	if c.EmailSMTPSecure == "" {
 		c.EmailSMTPSecure = "tls"
 	}
+	c.decryptSensitive()
 	return &c, nil
 }
 
+// sensitiveValues 返回需要加密存储的字段值（顺序与 setSensitive 一致）。
+func sensitiveValues(c *NotifyConfig) []string {
+	return []string{
+		c.EmailPassword, c.TelegramBotToken, c.WxPusherAppToken,
+		c.FeishuWebhook, c.FeishuSecret, c.DingTalkWebhook, c.DingTalkSecret,
+		c.TGCallAPIHash, c.TGCallSession,
+	}
+}
+
+func (c *NotifyConfig) setSensitive(i int, v string) {
+	switch i {
+	case 0:
+		c.EmailPassword = v
+	case 1:
+		c.TelegramBotToken = v
+	case 2:
+		c.WxPusherAppToken = v
+	case 3:
+		c.FeishuWebhook = v
+	case 4:
+		c.FeishuSecret = v
+	case 5:
+		c.DingTalkWebhook = v
+	case 6:
+		c.DingTalkSecret = v
+	case 7:
+		c.TGCallAPIHash = v
+	case 8:
+		c.TGCallSession = v
+	}
+}
+
+// encryptSensitive 就地加密敏感字段；任一失败都返回错误（不降级明文）。
+func encryptSensitive(c *NotifyConfig) error {
+	for i, v := range sensitiveValues(c) {
+		out, err := secret.Encrypt(v)
+		if err != nil {
+			return err
+		}
+		c.setSensitive(i, out)
+	}
+	return nil
+}
+
+// decryptSensitive 就地解密敏感字段。无前缀的历史明文原样放行；
+// 解密失败（密钥更换等）时字段置空——渠道会失效，重新保存配置即可修复。
+func (c *NotifyConfig) decryptSensitive() {
+	for i, v := range sensitiveValues(c) {
+		out, err := secret.Decrypt(v)
+		if err != nil {
+			log.Printf("[store] 解密凭据字段 %d 失败（已置空，重新保存渠道配置即可修复）: %v", i, err)
+			c.setSensitive(i, "")
+			continue
+		}
+		c.setSensitive(i, out)
+	}
+}
+
 // SaveConfig 插入或更新用户的通知配置（UPSERT，方言由 Dialect 生成）。
-// updated_at 一并放进插入列，冲突更新时取 excluded/VALUES 的同一新值。
+// 敏感字段先加密再落库；updated_at 一并放进插入列，冲突更新时取同一新值。
 func (r *NotifyRepo) SaveConfig(c *NotifyConfig) error {
+	stored := *c
+	if err := encryptSensitive(&stored); err != nil {
+		return fmt.Errorf("加密凭据失败: %w", err)
+	}
 	cols := []string{
 		"user_id", "email_enabled", "email_smtp_host", "email_smtp_port", "email_smtp_secure",
 		"email_smtp_username", "email_from_email", "email_from_name", "email_password", "email_to_email",
@@ -112,18 +178,65 @@ func (r *NotifyRepo) SaveConfig(c *NotifyConfig) error {
 	}
 	q := r.DB.Dialect.UpsertUpdate("notification_configs", "user_id", cols, cols[1:])
 	_, err := r.DB.Exec(q,
-		c.UserID, boolInt(c.EmailEnabled), nullStr(c.EmailSMTPHost), c.EmailSMTPPort, c.EmailSMTPSecure,
-		nullStr(c.EmailSMTPUsername), nullStr(c.EmailFromEmail), nullStr(c.EmailFromName),
-		nullStr(c.EmailPassword), nullStr(c.EmailToEmail),
-		boolInt(c.TelegramEnabled), nullStr(c.TelegramBotToken), nullStr(c.TelegramChatID),
-		boolInt(c.WxPusherEnabled), nullStr(c.WxPusherAppToken), nullStr(c.WxPusherUID),
-		boolInt(c.FeishuEnabled), nullStr(c.FeishuWebhook), nullStr(c.FeishuSecret),
-		boolInt(c.DingTalkEnabled), nullStr(c.DingTalkWebhook), nullStr(c.DingTalkSecret),
-		boolInt(c.TGCallEnabled), nullInt(c.TGCallAPIID), nullStr(c.TGCallAPIHash),
-		nullStr(c.TGCallPhone), nullStr(c.TGCallSession), nullStr(c.TGCallTarget),
+		stored.UserID, boolInt(stored.EmailEnabled), nullStr(stored.EmailSMTPHost), stored.EmailSMTPPort, stored.EmailSMTPSecure,
+		nullStr(stored.EmailSMTPUsername), nullStr(stored.EmailFromEmail), nullStr(stored.EmailFromName),
+		nullStr(stored.EmailPassword), nullStr(stored.EmailToEmail),
+		boolInt(stored.TelegramEnabled), nullStr(stored.TelegramBotToken), nullStr(stored.TelegramChatID),
+		boolInt(stored.WxPusherEnabled), nullStr(stored.WxPusherAppToken), nullStr(stored.WxPusherUID),
+		boolInt(stored.FeishuEnabled), nullStr(stored.FeishuWebhook), nullStr(stored.FeishuSecret),
+		boolInt(stored.DingTalkEnabled), nullStr(stored.DingTalkWebhook), nullStr(stored.DingTalkSecret),
+		boolInt(stored.TGCallEnabled), nullInt(stored.TGCallAPIID), nullStr(stored.TGCallAPIHash),
+		nullStr(stored.TGCallPhone), nullStr(stored.TGCallSession), nullStr(stored.TGCallTarget),
 		db.Touch(time.Now()),
 	)
 	return err
+}
+
+// EncryptPlainConfigs 把历史明文凭据一次性转为密文（启动时调用，幂等）。
+// 解密层对无前缀值原样放行，读出后原样重存即完成加密；已全为密文的行跳过。
+// 返回改写的行数。
+func (r *NotifyRepo) EncryptPlainConfigs() (int, error) {
+	rows, err := r.DB.Query(`SELECT user_id FROM notification_configs`)
+	if err != nil {
+		return 0, err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, uid := range ids {
+		cfg, err := r.ConfigForUser(uid)
+		if err != nil {
+			return n, err
+		}
+		if cfg == nil || !hasPlain(cfg) {
+			continue
+		}
+		if err := r.SaveConfig(cfg); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
+
+func hasPlain(c *NotifyConfig) bool {
+	for _, v := range sensitiveValues(c) {
+		if v != "" && !secret.IsEncrypted(v) {
+			return true
+		}
+	}
+	return false
 }
 
 // Notification 对应 notifications 表。
@@ -145,10 +258,15 @@ type Notification struct {
 }
 
 // SaveTGCallSession 回存 MTProto 会话（tg-login 登录或会话轮换后调用）。
+// 会话等同账号完全访问权，与其它凭据一样加密落库。
 func (r *NotifyRepo) SaveTGCallSession(userID int64, session string) error {
-	_, err := r.DB.Exec(
+	enc, err := secret.Encrypt(session)
+	if err != nil {
+		return err
+	}
+	_, err = r.DB.Exec(
 		`UPDATE notification_configs SET tgcall_session = ?, updated_at = ? WHERE user_id = ?`,
-		nullStr(session), db.Touch(time.Now()), userID,
+		nullStr(enc), db.Touch(time.Now()), userID,
 	)
 	return err
 }
