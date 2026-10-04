@@ -182,6 +182,13 @@ func (c *NotifyConfig) decryptSensitive() {
 // 敏感字段先加密再落库；updated_at 一并放进插入列，冲突更新时取同一新值。
 func (r *NotifyRepo) SaveConfig(c *NotifyConfig) error {
 	stored := *c
+	// 防御性归一化：显式插入时 schema 默认值不生效，非法值会让 CHECK 拒绝整行
+	if stored.EmailSMTPSecure != "tls" && stored.EmailSMTPSecure != "ssl" && stored.EmailSMTPSecure != "none" {
+		stored.EmailSMTPSecure = "tls"
+	}
+	if stored.EmailSMTPPort == 0 {
+		stored.EmailSMTPPort = 587
+	}
 	if err := encryptSensitive(&stored); err != nil {
 		return fmt.Errorf("加密凭据失败: %w", err)
 	}
@@ -212,33 +219,48 @@ func (r *NotifyRepo) SaveConfig(c *NotifyConfig) error {
 }
 
 // EncryptPlainConfigs 把历史明文凭据一次性转为密文（启动时调用，幂等）。
-// 解密层对无前缀值原样放行，读出后原样重存即完成加密；已全为密文的行跳过。
-// 返回改写的行数。
+// 判断基于**库内原始值**（解密后的内存值永远是明文，不能作为依据）；
+// 已全为密文的行跳过。返回改写的行数。
 func (r *NotifyRepo) EncryptPlainConfigs() (int, error) {
-	rows, err := r.DB.Query(`SELECT user_id FROM notification_configs`)
+	rows, err := r.DB.Query(`SELECT user_id,
+		email_password, telegram_bot_token, wxpusher_app_token,
+		feishu_webhook, feishu_secret, dingtalk_webhook, dingtalk_secret,
+		tgcall_api_hash, tgcall_session
+		FROM notification_configs`)
 	if err != nil {
 		return 0, err
 	}
-	var ids []int64
+	var plainIDs []int64
 	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
+		var uid int64
+		vals := make([]sql.NullString, 9)
+		dest := []any{&uid}
+		for i := range vals {
+			dest = append(dest, &vals[i])
+		}
+		if err := rows.Scan(dest...); err != nil {
 			rows.Close()
 			return 0, err
 		}
-		ids = append(ids, id)
+		for _, v := range vals {
+			// 空值跳过；有值且无密文前缀 = 历史明文
+			if v.Valid && v.String != "" && !secret.IsEncrypted(v.String) {
+				plainIDs = append(plainIDs, uid)
+				break
+			}
+		}
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return 0, err
 	}
 	n := 0
-	for _, uid := range ids {
+	for _, uid := range plainIDs {
 		cfg, err := r.ConfigForUser(uid)
 		if err != nil {
 			return n, err
 		}
-		if cfg == nil || !hasPlain(cfg) {
+		if cfg == nil {
 			continue
 		}
 		if err := r.SaveConfig(cfg); err != nil {
@@ -247,15 +269,6 @@ func (r *NotifyRepo) EncryptPlainConfigs() (int, error) {
 		n++
 	}
 	return n, nil
-}
-
-func hasPlain(c *NotifyConfig) bool {
-	for _, v := range sensitiveValues(c) {
-		if v != "" && !secret.IsEncrypted(v) {
-			return true
-		}
-	}
-	return false
 }
 
 // Notification 对应 notifications 表。

@@ -95,6 +95,7 @@ server {
 ## 6. 数据库选择
 
 - 默认 SQLite（零配置）。备份 = 备份 `/var/lib/simkeeper/simkeeper.db` 一个文件（WAL 模式下用 `sqlite3 simkeeper.db ".backup '/backup/simkeeper.db'"` 更安全）。
+- **凭据加密密钥** `/var/lib/simkeeper/data/secret.key` 与数据库分开放置：只备份 DB（不含密钥）时，渠道凭据在备份里不可读——这是默认推荐的备份策略；若希望备份可直接恢复全部数据，把 `secret.key` 单独加密存放。
 - 要用 MySQL/PostgreSQL：先建库建用户，然后在 unit 的 `ExecStart` 加 `-driver mysql -dsn '...'`（格式见 README）。**数据库不要对公网开放**；如果数据库在本机之外，用内网/专线/VPN，不要裸公网。
 
 ## 7. 通知渠道配置
