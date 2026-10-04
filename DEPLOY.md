@@ -90,6 +90,8 @@ server {
 
 > 没有反代直接裸跑 HTTP？密码和会话就是明文传输。**务必上 HTTPS**。
 
+所有命令行参数都有环境变量等价（`SK_TRUST_PROXY` / `SK_SECURE_COOKIES` / `SK_ADDR` / `SK_CRON_INTERVAL` / `SK_DRIVER` / `SK_DB` / `SK_DSN`），想在 systemd 里统一用环境变量也可以（`Environment=` 行），两种写法等价。
+
 ## 6. 数据库选择
 
 - 默认 SQLite（零配置）。备份 = 备份 `/var/lib/simkeeper/simkeeper.db` 一个文件（WAL 模式下用 `sqlite3 simkeeper.db ".backup '/backup/simkeeper.db'"` 更安全）。
