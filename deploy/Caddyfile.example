@@ -1,0 +1,20 @@
+# Caddy 反向代理示例（自动签发 HTTPS 证书）
+# 用法：把域名换成你的，放到 /etc/caddy/Caddyfile，然后 systemctl reload caddy。
+#
+# Caddy 会自动：
+#   - 终结 TLS（证书自动申请续期）
+#   - 设置 X-Forwarded-For（程序侧需开启 -trust-proxy，取链最右值）
+#   - 转发 Host 头
+#
+# 程序侧对应参数（见 deploy/simkeeper.service，已默认开启）：
+#   -trust-proxy     限流按真实客户端 IP 计数
+#   -secure-cookies  会话 Cookie 加 Secure 标记（TLS 在这里终结）
+
+sim.example.com {
+    reverse_proxy 127.0.0.1:8080
+
+    # 可选：日志
+    log {
+        output file /var/log/caddy/simkeeper.access.log
+    }
+}

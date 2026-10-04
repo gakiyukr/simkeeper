@@ -26,7 +26,7 @@ go build -o simkeeper .
 
 ## 运行配置
 
-命令行参数与环境变量等价（环境变量名：`SK_DRIVER` / `SK_DB` / `SK_DSN` / `SK_ADDR` / `SK_TRUST_PROXY` / `SK_CRON_INTERVAL`）：
+命令行参数与环境变量等价（环境变量名：`SK_DRIVER` / `SK_DB` / `SK_DSN` / `SK_ADDR` / `SK_TRUST_PROXY` / `SK_SECURE_COOKIES` / `SK_CRON_INTERVAL`）：
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -34,8 +34,15 @@ go build -o simkeeper .
 | `-db` | `data/simkeeper.db` | SQLite 数据库文件路径（目录自动创建） |
 | `-dsn` | — | MySQL/PostgreSQL 连接串（该两种驱动必填） |
 | `-addr` | `127.0.0.1:8080` | HTTP 监听地址 |
-| `-trust-proxy` | `false` | 部署在可信反向代理后时开启，登录限流才按 `X-Forwarded-For` 取真实 IP |
+| `-trust-proxy` | `false` | 部署在可信反向代理后时开启，登录限流才按 `X-Forwarded-For` 取真实 IP（取链**最右值**，客户端伪造的前缀无效） |
+| `-secure-cookies` | `false` | 会话 Cookie 强制加 `Secure` 标记；TLS 由反向代理终结时**必须开启** |
 | `-cron-interval` | `1h` | 定时任务间隔（`30m`/`1h`）；`0` 禁用进程内调度，仅保留管理后台手动触发 |
+
+## 部署
+
+完整 VPS 部署指南（构建、systemd、Caddy/Nginx 反代、备份、升级、安全清单）见 **[DEPLOY.md](DEPLOY.md)**，服务单元和反代示例在 [`deploy/`](deploy/)。
+
+**时区很重要**：提醒的「当天」判断依赖进程的本地时区。部署前 `timedatectl set-timezone` 或在 systemd 里设置 `TZ`；启动日志会打印时区自检结果，不符会错位最多一整天。
 
 ## 目录结构
 

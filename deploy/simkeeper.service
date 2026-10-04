@@ -1,0 +1,41 @@
+# SimKeeper systemd 服务单元
+# 安装：
+#   sudo useradd -r -s /usr/sbin/nologin simkeeper
+#   sudo mkdir -p /opt/simkeeper /var/lib/simkeeper
+#   sudo cp simkeeper /opt/simkeeper/ && sudo chown -R simkeeper:simkeeper /var/lib/simkeeper
+#   sudo cp deploy/simkeeper.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now simkeeper
+# 时区：把 Environment=TZ 改成你的业务时区（见 DEPLOY.md「时区」一节）。
+
+[Unit]
+Description=SimKeeper - eSIM keep-alive reminder
+Documentation=https://github.com/gakiyukr/simkeeper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=simkeeper
+Group=simkeeper
+ExecStart=/opt/simkeeper/simkeeper \
+    -db /var/lib/simkeeper/simkeeper.db \
+    -addr 127.0.0.1:8080 \
+    -trust-proxy \
+    -secure-cookies
+# 时区影响提醒的「当天」判断，务必与你的业务时区一致
+Environment=TZ=Asia/Shanghai
+Restart=on-failure
+RestartSec=5s
+
+# 基础沙箱：程序只需要读写 /var/lib/simkeeper（数据库）和 /tmp
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/simkeeper
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
