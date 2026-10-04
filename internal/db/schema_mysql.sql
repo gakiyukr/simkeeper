@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS phone_numbers (
     KEY idx_numbers_user (user_id),
     KEY idx_numbers_expiry (expiry_date),
     KEY idx_numbers_status (status),
-    CONSTRAINT chk_numbers_period CHECK (auto_expiry_period IN (90, 180, 365)),
+    CONSTRAINT chk_numbers_period CHECK (auto_expiry_period IS NULL OR auto_expiry_period BETWEEN 1 AND 3650),
     CONSTRAINT chk_numbers_status CHECK (status IN ('active', 'inactive')),
     CONSTRAINT fk_numbers_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

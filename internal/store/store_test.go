@@ -441,3 +441,33 @@ func TestFailedForRetryCarriesCreatedAt(t *testing.T) {
 		t.Fatalf("回拨后 age=%v，应 ≥ 1h 才会被重投", age)
 	}
 }
+
+
+// TestNumberMarkRenewed 标记已续费：到期日与起始日重置、归属校验生效。
+func TestNumberMarkRenewed(t *testing.T) {
+	h := testDB(t)
+	r := &NumberRepo{DB: h}
+	uid := mustUser(t, &UserRepo{DB: h}, "renewer", "user")
+	numID, err := r.Create(&PhoneNumber{
+		UserID: uid, PhoneNumber: "+85267000000", CountryCode: "HK", CountryName: "香港",
+		ExpiryDate: "2026-12-31", AutoExpiryEnabled: true, AutoStartDate: "2026-01-01",
+		AutoExpiryPeriod: 90, Status: "active",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, err := r.MarkRenewed(numID, uid, "2026-11-02", "2026-08-04"); err != nil || n != 1 {
+		t.Fatalf("MarkRenewed 应命中 1 行, got %d, err %v", n, err)
+	}
+	got, err := r.ByID(numID, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ExpiryDate != "2026-11-02" || got.AutoStartDate != "2026-08-04" || got.AutoCalculatedExpiry != "2026-11-02" {
+		t.Fatalf("到期日/起始日/计算到期日未同步更新: %+v", got)
+	}
+	// 他人调用不得命中（归属校验）
+	if n, err := r.MarkRenewed(numID, uid+999, "2027-01-01", "2026-10-04"); err != nil || n != 0 {
+		t.Fatalf("非归属用户应 0 行命中, got %d, err %v", n, err)
+	}
+}

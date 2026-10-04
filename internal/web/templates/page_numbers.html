@@ -11,9 +11,23 @@
 </div>
 
 <div class="card">
+  <form method="get" action="/numbers" class="toolbar">
+    <input class="input" type="text" name="q" value="{{.Content.Search}}" placeholder="搜索号码 / 国家 / 运营商 / 备注">
+    <select class="select auto" name="status">
+      <option value="">全部状态</option>
+      <option value="active" {{if eq .Content.Status "active"}}selected{{end}}>使用中</option>
+      <option value="inactive" {{if eq .Content.Status "inactive"}}selected{{end}}>已停用</option>
+    </select>
+    <select class="select auto" name="sort">
+      <option value="expiry_asc" {{if ne .Content.Sort "expiry_desc"}}{{if ne .Content.Sort "created_desc"}}selected{{end}}{{end}}>到期日 ↑</option>
+      <option value="expiry_desc" {{if eq .Content.Sort "expiry_desc"}}selected{{end}}>到期日 ↓</option>
+      <option value="created_desc" {{if eq .Content.Sort "created_desc"}}selected{{end}}>最新添加</option>
+    </select>
+    <button type="submit" class="btn btn-outline btn-sm">{{template "ico_search"}}筛选</button>
+  </form>
   <div class="card-content flush">
     {{if not .Content.Numbers}}
-    <div class="empty">还没有号码，点击右上角添加。</div>
+    <div class="empty">{{if or .Content.Search .Content.Status}}没有匹配的号码{{else}}还没有号码，点击右上角添加。{{end}}</div>
     {{else}}
     <div class="tbl-wrap">
       <table class="tbl">
@@ -24,9 +38,14 @@
         <tbody>
           {{range .Content.Numbers}}
           <tr>
-            <td class="mono-strong">{{.PhoneNumber}}</td>
-            <td>{{.CountryName}}<br><small class="muted">{{.Carrier}}</small></td>
-            <td>{{.ExpiryDate}}</td>
+            <td><span class="mono-strong phone-val">{{.PhoneNumber}}</span></td>
+            <td>{{.CountryName}}{{if .Carrier}}<br><small class="muted">{{.Carrier}}</small>{{end}}</td>
+            <td>
+              {{.ExpiryDate}}
+              {{if gt (cycleProgress .) -1}}
+              <div class="progress" title="当前周期进度 {{cycleProgress .}}%"><i class="{{fillClass (daysLeft .)}}" style="width:{{cycleProgress .}}%"></i></div>
+              {{end}}
+            </td>
             <td><span class="badge {{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span></td>
             <td>{{if ne .Status "inactive"}}<span class="badge badge-ok">使用中</span>{{else}}<span class="badge badge-muted">已停用</span>{{end}}</td>
             <td>
@@ -42,6 +61,13 @@
             </td>
             <td>
               <div class="actions">
+                {{if and .AutoExpiryEnabled (gt .AutoExpiryPeriod 0)}}
+                <form method="post" action="/numbers/{{.ID}}/renew" class="inline"
+                      onsubmit="return confirm('确定已续费吗？到期日将重置为今天 + {{.AutoExpiryPeriod}} 天。')">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <button type="submit" class="btn btn-sm btn-outline" title="续费完成：到期日顺延一个周期">已续费</button>
+                </form>
+                {{end}}
                 <a class="btn btn-sm btn-outline" href="/numbers/{{.ID}}/edit">编辑</a>
                 <form method="post" action="/numbers/{{.ID}}/delete" class="inline"
                       onsubmit="return confirm('确定删除号码 {{.PhoneNumber}} 吗？此操作不可恢复。')">
@@ -57,9 +83,9 @@
     </div>
     {{if gt .Content.Pages 1}}
     <div class="pager">
-      {{if gt .Content.Page 1}}<a class="btn btn-sm btn-outline" href="/numbers?page={{sub .Content.Page 1}}">‹ 上一页</a>{{end}}
+      {{if gt .Content.Page 1}}<a class="btn btn-sm btn-outline" href="/numbers?page={{sub .Content.Page 1}}{{if .Content.Search}}&q={{.Content.Search}}{{end}}{{if .Content.Status}}&status={{.Content.Status}}{{end}}{{if .Content.Sort}}&sort={{.Content.Sort}}{{end}}">‹ 上一页</a>{{end}}
       <span>第 {{.Content.Page}} / {{.Content.Pages}} 页</span>
-      {{if lt .Content.Page .Content.Pages}}<a class="btn btn-sm btn-outline" href="/numbers?page={{add .Content.Page 1}}">下一页 ›</a>{{end}}
+      {{if lt .Content.Page .Content.Pages}}<a class="btn btn-sm btn-outline" href="/numbers?page={{add .Content.Page 1}}{{if .Content.Search}}&q={{.Content.Search}}{{end}}{{if .Content.Status}}&status={{.Content.Status}}{{end}}{{if .Content.Sort}}&sort={{.Content.Sort}}{{end}}">下一页 ›</a>{{end}}
     </div>
     {{end}}
     {{end}}

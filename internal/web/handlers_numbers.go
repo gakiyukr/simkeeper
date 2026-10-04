@@ -1,6 +1,8 @@
 package web
 
 import (
+	"encoding/json"
+	"fmt"
 	"html/template"
 	"net/http"
 	"regexp"
@@ -146,26 +148,94 @@ type NumbersPage struct {
 	Page    int
 	Pages   int
 	Search  string
+	Status  string
+	Sort    string
 }
 
-// HandleNumbers 号码管理列表。
+// HandleNumbers 号码管理列表：关键词/状态过滤 + 排序 + 分页。
+// 号码量受每用户配额约束（默认 50，上限万级），取全量后内存过滤分页，
+// 免去三方言的动态 SQL 分支；排序键见 filterSortNumbers。
 func (a *App) HandleNumbers(w http.ResponseWriter, r *http.Request) {
 	u := a.currentUser(r)
 	d := a.baseData(r, "号码管理")
 	d.ActiveNav = "numbers"
 
-	pageNum := atoiDefault(r.URL.Query().Get("page"), 1)
-	numbers, total, err := a.Numbers.ListForUser(u.ID, pageNum, 20)
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	status := r.URL.Query().Get("status")
+	sortKey := r.URL.Query().Get("sort")
+	all, _, err := a.Numbers.ListForUser(u.ID, 1, 1000000)
 	if err != nil {
 		http.Error(w, "内部错误", http.StatusInternalServerError)
 		return
 	}
+	filtered := filterSortNumbers(all, q, status, sortKey)
+	total := len(filtered)
+	pageNum := atoiDefault(r.URL.Query().Get("page"), 1)
 	pages := (total + 19) / 20
 	if pages < 1 {
 		pages = 1
 	}
-	d.Content = NumbersPage{Numbers: numbers, Total: total, Page: pageNum, Pages: pages}
+	if pageNum < 1 {
+		pageNum = 1
+	}
+	if pageNum > pages {
+		pageNum = pages
+	}
+	start := (pageNum - 1) * 20
+	end := start + 20
+	if end > total {
+		end = total
+	}
+	d.Content = NumbersPage{Numbers: filtered[start:end], Total: total, Page: pageNum, Pages: pages, Search: q, Status: status, Sort: sortKey}
 	a.render(w, http.StatusOK, "page_numbers", d)
+}
+
+// filterSortNumbers 纯函数：关键词匹配号码/国家/运营商/备注（不区分大小写），
+// 状态过滤，按到期时间（默认升序）/降序/最新添加排序；平局按 ID 保证稳定。
+func filterSortNumbers(all []store.PhoneNumber, q, status, sortKey string) []store.PhoneNumber {
+	q = strings.ToLower(strings.TrimSpace(q))
+	out := make([]store.PhoneNumber, 0, len(all))
+	for _, n := range all {
+		if status == "active" && n.Status != "active" {
+			continue
+		}
+		if status == "inactive" && n.Status != "inactive" {
+			continue
+		}
+		if q != "" {
+			hay := strings.ToLower(n.PhoneNumber + " " + n.CountryName + " " + n.CountryCode + " " + n.Carrier + " " + n.Notes)
+			if !strings.Contains(hay, q) {
+				continue
+			}
+		}
+		out = append(out, n)
+	}
+	less := func(i, j int) bool { return out[i].ID < out[j].ID }
+	switch sortKey {
+	case "expiry_desc":
+		less = func(i, j int) bool {
+			if out[i].ExpiryDate != out[j].ExpiryDate {
+				return out[i].ExpiryDate > out[j].ExpiryDate
+			}
+			return out[i].ID < out[j].ID
+		}
+	case "created_desc":
+		less = func(i, j int) bool {
+			if out[i].CreatedAt != out[j].CreatedAt {
+				return out[i].CreatedAt > out[j].CreatedAt
+			}
+			return out[i].ID > out[j].ID
+		}
+	default: // expiry_asc
+		less = func(i, j int) bool {
+			if out[i].ExpiryDate != out[j].ExpiryDate {
+				return out[i].ExpiryDate < out[j].ExpiryDate
+			}
+			return out[i].ID < out[j].ID
+		}
+	}
+	sort.Slice(out, less)
+	return out
 }
 
 // HandleNumberNew 新增号码表单。
@@ -271,8 +341,8 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 			fail("自动续期起始日期格式应为 YYYY-MM-DD")
 			return
 		}
-		if autoPeriod != 90 && autoPeriod != 180 && autoPeriod != 365 {
-			fail("自动续期周期只支持 90/180/365 天")
+		if autoPeriod < 1 || autoPeriod > 3650 {
+			fail("自动续期周期应为 1-3650 天")
 			return
 		}
 		expiryDate = start.AddDate(0, 0, autoPeriod)
@@ -338,6 +408,38 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		a.setFlash(w, "号码已添加", false)
 	}
 	http.Redirect(w, r, "/numbers", http.StatusSeeOther)
+}
+
+// HandleNumberRenew 标记已续费：到期日重置为「今天 + 周期天数」，
+// 周期起点同步重置为今天（与运营商扣费后顺延一个完整周期的行为一致）。
+// 仅开启周期自动计算的号码开放；GET 访问直接回列表。
+func (a *App) HandleNumberRenew(w http.ResponseWriter, r *http.Request) {
+	u := a.currentUser(r)
+	back := func(msg string, isErr bool) {
+		a.setFlash(w, msg, isErr)
+		http.Redirect(w, r, "/numbers", http.StatusSeeOther)
+	}
+	if r.Method != http.MethodPost {
+		back("", false)
+		return
+	}
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	n, err := a.Numbers.ByID(id, u.ID)
+	if err != nil {
+		back("号码不存在", true)
+		return
+	}
+	if !n.AutoExpiryEnabled || n.AutoExpiryPeriod <= 0 {
+		back("仅开启周期自动计算的号码支持标记已续费", true)
+		return
+	}
+	today := time.Now()
+	newExpiry := today.AddDate(0, 0, n.AutoExpiryPeriod).Format(dateLayout)
+	if _, err := a.Numbers.MarkRenewed(n.ID, u.ID, newExpiry, today.Format(dateLayout)); err != nil {
+		back("操作失败", true)
+		return
+	}
+	back(fmt.Sprintf("已标记续费，到期日更新至 %s", newExpiry), false)
 }
 
 // HandleNumberDelete 删除号码（POST + CSRF + 归属校验）。
@@ -517,6 +619,50 @@ var funcMap = template.FuncMap{
 		}
 		return s
 	},
+	// cycleProgress 当前周期的时间进度（0-100），周期起点按「到期日 - 周期」
+	// 推算（与自动滚动口径一致，滚动后依旧正确）；非周期号码返回 -1，模板不渲染进度条。
+	"cycleProgress": func(n store.PhoneNumber) int {
+		if n.AutoExpiryPeriod <= 0 {
+			return -1
+		}
+		expiry, err := time.ParseInLocation(dateLayout, n.ExpiryDate, time.Local)
+		if err != nil {
+			return -1
+		}
+		now := time.Now()
+		if now.After(expiry) {
+			return 100
+		}
+		start := expiry.AddDate(0, 0, -n.AutoExpiryPeriod)
+		total := expiry.Sub(start).Hours()
+		if total <= 0 {
+			return 100
+		}
+		pct := int(now.Sub(start).Hours() / total * 100)
+		if pct < 0 {
+			pct = 0
+		}
+		if pct > 100 {
+			pct = 100
+		}
+		return pct
+	},
+	// fillClass 进度条填充色：与剩余天数徽章同色系。
+	"fillClass": func(days int) string {
+		switch {
+		case days < 0:
+			return "fill-err"
+		case days <= 3:
+			return "fill-warn"
+		}
+		return "fill-ok"
+	},
+	// countryJSON / countryName：国家可搜索选择器用。
+	"countryJSON": func(v any) template.JS {
+		b, _ := json.Marshal(v)
+		return template.JS(b)
+	},
+	"countryName": countryNameByCode,
 	// firstRune 取用户名首字符（按 rune），用作侧边栏头像字母。
 	"firstRune": func(s string) string {
 		for _, r := range strings.TrimSpace(s) {

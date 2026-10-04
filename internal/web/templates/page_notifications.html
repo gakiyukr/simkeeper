@@ -20,7 +20,7 @@
             <td class="muted" style="white-space:nowrap">{{.CreatedAt}}</td>
             <td>{{typeText .Type}}</td>
             <td><span class="badge-sec">{{channelText .Channel}}</span></td>
-            <td>{{if .PhoneNumber}}<span class="mono-strong">{{.PhoneNumber}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
+            <td>{{if .PhoneNumber}}<span class="mono-strong phone-val">{{.PhoneNumber}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
             <td class="muted" style="min-width:14rem">
               <span title="{{.Message}}">{{snippet .Message}}</span>
               {{if .ErrorMessage}}<br><small class="err-text" title="{{.ErrorMessage}}">失败原因：{{snippet .ErrorMessage}}</small>{{end}}

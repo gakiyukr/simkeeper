@@ -4,6 +4,7 @@
 package db
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
@@ -139,6 +140,169 @@ func (d *DB) migrateExtra() error {
 	if _, err := d.ensureColumns("notifications", notificationColumns); err != nil {
 		return err
 	}
-	_, err := d.ensureColumns("notification_configs", notificationConfigColumns)
-	return err
+	if _, err := d.ensureColumns("notification_configs", notificationConfigColumns); err != nil {
+		return err
+	}
+	return d.relaxPeriodCheck()
+}
+
+// relaxPeriodCheck 放宽 phone_numbers.auto_expiry_period 的 CHECK 约束：
+// 旧库只允许 90/180/365 天，现版本支持 1-3650 天的任意周期。
+// SQLite 需整表重建（CHECK 无法 ALTER）；MySQL/PG 按名删除约束，均幂等。
+func (d *DB) relaxPeriodCheck() error {
+	switch d.Dialect.Name {
+	case DialectSQLite:
+		return d.relaxPeriodCheckSQLite()
+	case DialectPostgres:
+		_, err := d.DB.Exec(`ALTER TABLE phone_numbers DROP CONSTRAINT IF EXISTS phone_numbers_auto_expiry_period_check`)
+		return err
+	case DialectMySQL:
+		var n int
+		if err := d.DB.QueryRow(
+			`SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+			 WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'phone_numbers'
+			   AND CONSTRAINT_NAME = 'chk_numbers_period'`,
+		).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return nil
+		}
+		_, err := d.DB.Exec(`ALTER TABLE phone_numbers DROP CONSTRAINT chk_numbers_period`)
+		return err
+	}
+	return nil
+}
+
+// relaxPeriodCheckSQLite 在专用连接上按标准流程重建表：
+// PRAGMA 是连接级设置，必须与重建语句同连接执行。
+func (d *DB) relaxPeriodCheckSQLite() error {
+	var tableSQL string
+	if err := d.DB.QueryRow(
+		`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'phone_numbers'`,
+	).Scan(&tableSQL); err != nil {
+		return err
+	}
+	if !strings.Contains(tableSQL, "IN (90, 180, 365)") {
+		return nil // 已是新约束（或无约束），无需重建
+	}
+	ctx := context.Background()
+	conn, err := d.DB.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	exec := func(q string) error {
+		_, err := conn.ExecContext(ctx, q)
+		if err != nil {
+			return fmt.Errorf("%s: %w", q[:min(len(q), 60)], err)
+		}
+		return nil
+	}
+	if err := exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	defer exec(`PRAGMA foreign_keys = ON`) // best effort 恢复
+
+	// 新表定义与 schema_sqlite.sql 保持一致，仅 CHECK 放宽
+	newDDL := `CREATE TABLE phone_numbers_new (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id               INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    phone_number          TEXT    NOT NULL,
+    country_code          TEXT    NOT NULL,
+    country_name          TEXT    NOT NULL,
+    carrier               TEXT,
+    expiry_date           TEXT    NOT NULL,
+    recharge_amount       REAL,
+    recharge_currency     TEXT    NOT NULL DEFAULT 'USD',
+    renewal_days_before   INTEGER NOT NULL DEFAULT 7,
+    usage_days_before     INTEGER NOT NULL DEFAULT 3,
+    auto_expiry_enabled   INTEGER NOT NULL DEFAULT 0,
+    auto_start_date       TEXT,
+    auto_expiry_period    INTEGER CHECK (auto_expiry_period IS NULL OR auto_expiry_period BETWEEN 1 AND 3650),
+    auto_calculated_expiry TEXT,
+    status                TEXT    NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+    notes                 TEXT,
+    created_at            TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated_at            TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
+)`
+	if err := exec(`DROP TABLE IF EXISTS phone_numbers_new`); err != nil {
+		return err // 兼容上次重建中途失败留下的残留表
+	}
+	if err := exec(newDDL); err != nil {
+		return err
+	}
+	// 交集列拷贝：以新表列为准 ∩ 旧表现有列（EnsureColumns 已先补齐旧库列）
+	newCols := map[string]bool{}
+	rows, err := conn.QueryContext(ctx, `PRAGMA table_info(phone_numbers_new)`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notNull, pk int
+		var dflt any
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		newCols[name] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	// 注意：SQLite 池为单连接，专用连接被本函数持有时，池上的查询会死锁，
+	// 因此旧表列信息也必须走同一专用连接。
+	oldCols := map[string]bool{}
+	rows, err = conn.QueryContext(ctx, `PRAGMA table_info(phone_numbers)`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notNull, pk int
+		var dflt any
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		oldCols[name] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	var cols []string
+	for _, name := range []string{"id", "user_id", "phone_number", "country_code", "country_name", "carrier",
+		"expiry_date", "recharge_amount", "recharge_currency", "renewal_days_before", "usage_days_before",
+		"auto_expiry_enabled", "auto_start_date", "auto_expiry_period", "auto_calculated_expiry",
+		"status", "notes", "created_at", "updated_at"} {
+		if newCols[name] && oldCols[name] {
+			cols = append(cols, name)
+		}
+	}
+	if err := exec(`INSERT INTO phone_numbers_new (` + strings.Join(cols, ", ") + `)
+	                SELECT ` + strings.Join(cols, ", ") + ` FROM phone_numbers`); err != nil {
+		return err
+	}
+	if err := exec(`DROP TABLE phone_numbers`); err != nil {
+		return err
+	}
+	if err := exec(`ALTER TABLE phone_numbers_new RENAME TO phone_numbers`); err != nil {
+		return err
+	}
+	for _, idx := range []string{
+		`CREATE INDEX IF NOT EXISTS idx_numbers_user   ON phone_numbers(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_numbers_expiry ON phone_numbers(expiry_date)`,
+		`CREATE INDEX IF NOT EXISTS idx_numbers_status ON phone_numbers(status)`,
+	} {
+		if err := exec(idx); err != nil {
+			return err
+		}
+	}
+	return nil
 }

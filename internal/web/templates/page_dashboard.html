@@ -23,9 +23,14 @@
         <tbody>
           {{range .Content.Upcoming}}
           <tr>
-            <td class="mono-strong">{{.PhoneNumber}}</td>
+            <td><span class="mono-strong phone-val">{{.PhoneNumber}}</span></td>
             <td>{{.CountryName}}{{if .Carrier}}<span class="muted"> · {{.Carrier}}</span>{{end}}</td>
-            <td>{{.ExpiryDate}}</td>
+            <td>
+              {{.ExpiryDate}}
+              {{if gt (cycleProgress .) -1}}
+              <div class="progress" title="当前周期进度 {{cycleProgress .}}%"><i class="{{fillClass (daysLeft .)}}" style="width:{{cycleProgress .}}%"></i></div>
+              {{end}}
+            </td>
             <td><span class="badge {{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span></td>
           </tr>
           {{end}}

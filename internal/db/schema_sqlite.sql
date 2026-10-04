@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS phone_numbers (
     usage_days_before     INTEGER NOT NULL DEFAULT 3,    -- 使用提醒提前天数
     auto_expiry_enabled   INTEGER NOT NULL DEFAULT 0,    -- 自动续期开关
     auto_start_date       TEXT,                          -- 自动续期起始日
-    auto_expiry_period    INTEGER CHECK (auto_expiry_period IN (90, 180, 365)),
+    auto_expiry_period    INTEGER CHECK (auto_expiry_period IS NULL OR auto_expiry_period BETWEEN 1 AND 3650),
     auto_calculated_expiry TEXT,                         -- 最近一次自动计算出的到期日
     status                TEXT    NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
     notes                 TEXT,

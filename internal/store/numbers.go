@@ -150,6 +150,21 @@ func (r *NumberRepo) ListForUser(userID int64, page, limit int) ([]PhoneNumber, 
 	return r.list(` WHERE user_id = ?`, []any{userID}, page, limit)
 }
 
+// MarkRenewed 标记已续费：到期日重置为「今天 + 周期天数」并同步
+// auto_calculated_expiry 与 auto_start_date（新周期从今天起算，
+// 与运营商实际扣费后顺延的行为一致）。归属校验由 WHERE user_id 承担。
+func (r *NumberRepo) MarkRenewed(id, userID int64, newExpiry, today string) (int64, error) {
+	res, err := r.DB.Exec(
+		`UPDATE phone_numbers SET expiry_date = ?, auto_calculated_expiry = ?, auto_start_date = ?, updated_at = ?
+		 WHERE id = ? AND user_id = ?`,
+		newExpiry, newExpiry, today, db.Touch(time.Now()), id, userID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // ListForAdmin 管理端列出全部号码，可按号码/国家/运营商过滤。
 // LIKE 套 LOWER() 保证三方言大小写行为一致。
 func (r *NumberRepo) ListForAdmin(page, limit int, search string) ([]PhoneNumber, int, error) {

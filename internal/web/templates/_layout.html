@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="csrf-token" content="{{.CSRFToken}}">
 <title>{{.Title}} · {{.SiteName}}</title>
-<script>try{var t=localStorage.getItem('sk-theme');if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}</script>
+<script>try{var t=localStorage.getItem('sk-theme');if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark');if(localStorage.getItem('sk-mask-numbers')!=='0')document.documentElement.classList.add('phones-masked')}catch(e){}</script>
 <style>{{template "sk_css"}}</style>
 </head>
 <body>
@@ -61,6 +61,9 @@
         <span class="cur">{{.Title}}</span>
       </span>
       <span style="flex:1"></span>
+      <button type="button" class="icon-btn" onclick="skToggleMask()" title="显示 / 隐藏号码">
+        {{template "ico_eye"}}{{template "ico_eye_off"}}
+      </button>
       <button type="button" class="icon-btn" onclick="skTheme()" title="切换深色模式">
         {{template "ico_sun"}}{{template "ico_moon"}}
       </button>
@@ -86,6 +89,21 @@ function skTheme(){
   document.getElementById('sb-toggle').addEventListener('click',function(){sb.classList.add('open');bd.classList.add('show')});
   bd.addEventListener('click',function(){sb.classList.remove('open');bd.classList.remove('show')});
 })();
+function skApplyMask(){
+  var masked=document.documentElement.classList.contains('phones-masked');
+  document.querySelectorAll('.phone-val').forEach(function(el){
+    if(!el.dataset.full){el.dataset.full=el.textContent;}
+    var v=el.dataset.full;
+    el.textContent = masked ? (v.length>8 ? v.slice(0,4)+'••••'+v.slice(-4) : '••••') : v;
+  });
+}
+function skToggleMask(){
+  var d=document.documentElement;
+  if(d.classList.contains('phones-masked')){d.classList.remove('phones-masked');try{localStorage.setItem('sk-mask-numbers','0')}catch(e){}}
+  else{d.classList.add('phones-masked');try{localStorage.setItem('sk-mask-numbers','1')}catch(e){}}
+  skApplyMask();
+}
+skApplyMask();
 </script>
 </body>
 </html>
@@ -134,6 +152,8 @@ function skTheme(){
 {{define "ico_chev"}}<svg class="ic" style="width:.8rem;height:.8rem" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>{{end}}
 {{define "ico_sun"}}<svg class="ic ic-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>{{end}}
 {{define "ico_moon"}}<svg class="ic ic-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>{{end}}
+{{define "ico_eye"}}<svg class="ic ic-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>{{end}}
+{{define "ico_eye_off"}}<svg class="ic ic-eye-off" viewBox="0 0 24 24"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>{{end}}
 {{define "ico_plus"}}<svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg>{{end}}
 {{define "ico_search"}}<svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>{{end}}
 {{define "ico_check"}}<svg class="ic" viewBox="0 0 24 24"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>{{end}}
@@ -326,6 +346,30 @@ pre.msg{background:var(--muted);border-radius:calc(var(--radius) - 2px);padding:
 .err-text{color:oklch(50.5% .213 27.518)}.dark .err-text{color:oklch(70.4% .191 22.216)}
 .mono-strong{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85em;font-weight:600;letter-spacing:.01em}
 .actions{display:flex;gap:.4rem;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+/* 周期进度条（号码表 / 概览摘要） */
+.progress{height:.3rem;min-width:5rem;max-width:9rem;background:var(--muted);border-radius:9999px;overflow:hidden;margin-top:.35rem}
+.progress i{display:block;height:100%;border-radius:9999px}
+.fill-ok{background:oklch(69.6% .17 162.48)}
+.fill-warn{background:oklch(76.9% .188 70.08)}
+.fill-err{background:oklch(63.7% .237 25.331)}
+/* 时长快捷 chip */
+.chip-row{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem}
+.chip{height:1.75rem;padding:0 .7rem;border-radius:9999px;border:1px solid var(--border);background:var(--background);color:var(--foreground);font-size:.8125rem;cursor:pointer;font-family:inherit}
+.chip:hover{background:var(--accent)}
+.chip.active{background:var(--primary);color:var(--primary-foreground);border-color:var(--primary)}
+/* 国家可搜索组合框 */
+.combo{position:relative}
+.combo-list{position:absolute;top:calc(100% + .25rem);left:0;right:0;max-height:16rem;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);box-shadow:0 .5rem 1.5rem rgba(0,0,0,.15);z-index:60}
+.combo-item{padding:.45rem .75rem;font-size:.875rem;cursor:pointer}
+.combo-item small{color:var(--muted-foreground)}
+.combo-item:hover,.combo-item.active{background:var(--accent)}
+/* 号码列表工具栏 */
+.toolbar{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;padding:.75rem 1rem;border-bottom:1px solid var(--border)}
+.toolbar .input{width:14rem}
+/* 号码遮罩切换（眼睛图标随状态显隐） */
+.ic-eye-off{display:none}
+html:not(.phones-masked) .ic-eye{display:none}
+html:not(.phones-masked) .ic-eye-off{display:inline-block}
 
 /* ============ 认证页 ============ */
 .auth-body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem;background:var(--background)}
