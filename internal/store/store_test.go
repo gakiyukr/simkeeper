@@ -400,3 +400,44 @@ func TestSchemaMigrationsIdempotent(t *testing.T) {
 		t.Errorf("schema_migrations 应记录版本 1, got %d 行", n)
 	}
 }
+
+
+// TestFailedForRetryCarriesCreatedAt 回归：SELECT 漏选 created_at 会导致
+// 重投节奏推算失败、全部记录被静默跳过（重投永不执行）。
+func TestFailedForRetryCarriesCreatedAt(t *testing.T) {
+	h := testDB(t)
+	r := &NotifyRepo{DB: h}
+	uid := mustUser(t, &UserRepo{DB: h}, "bob", "user")
+	now := time.Now()
+
+	id, err := r.Record(uid, 0, "usage", "feishu", "subject", "body")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.MarkFailed(id, "HTTP 500"); err != nil {
+		t.Fatal(err)
+	}
+	// 把创建时间回拨 2 小时，模拟「失败已满 1 小时」的重投时机
+	backdated := now.Add(-2 * time.Hour).Format(time.DateTime)
+	if _, err := h.Exec(`UPDATE notifications SET created_at = ? WHERE id = ?`, backdated, id); err != nil {
+		t.Fatal(err)
+	}
+
+	recs, err := r.FailedForRetry(now, 24*time.Hour, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recs) != 1 {
+		t.Fatalf("应命中 1 条待重投, got %d", len(recs))
+	}
+	if recs[0].CreatedAt == "" {
+		t.Fatal("created_at 未被选出：重投节奏将无法推算，记录会被静默跳过")
+	}
+	created, err := time.ParseInLocation(time.DateTime, recs[0].CreatedAt, now.Location())
+	if err != nil {
+		t.Fatalf("created_at 解析失败: %v", err)
+	}
+	if age := now.Sub(created); age < time.Hour {
+		t.Fatalf("回拨后 age=%v，应 ≥ 1h 才会被重投", age)
+	}
+}

@@ -336,7 +336,7 @@ func (r *NotifyRepo) MarkFailed(id int64, reason string) error {
 func (r *NotifyRepo) FailedForRetry(now time.Time, window time.Duration, maxRetry int) ([]Notification, error) {
 	cutoff := now.Add(-window).Format(time.DateTime)
 	rows, err := r.DB.Query(
-		`SELECT id, user_id, phone_number_id, type, channel, COALESCE(message,''), COALESCE(retry_count,0)
+		`SELECT id, user_id, phone_number_id, type, channel, COALESCE(message,''), COALESCE(retry_count,0), COALESCE(created_at,'')
 		 FROM notifications
 		 WHERE status = 'failed' AND type IN ('renewal','usage')
 		   AND retry_count < ? AND created_at >= ?`,
@@ -349,7 +349,9 @@ func (r *NotifyRepo) FailedForRetry(now time.Time, window time.Duration, maxRetr
 	var out []Notification
 	for rows.Next() {
 		var n Notification
-		if err := rows.Scan(&n.ID, &n.UserID, &n.PhoneNumberID, &n.Type, &n.Channel, &n.Message, &n.RetryCount); err != nil {
+		// created_at 必须取出：重投节奏（失败后 1/2/3 小时）按它推算，
+		// 漏选会导致解析失败、全部记录被静默跳过（重投永不执行）。
+		if err := rows.Scan(&n.ID, &n.UserID, &n.PhoneNumberID, &n.Type, &n.Channel, &n.Message, &n.RetryCount, &n.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, n)

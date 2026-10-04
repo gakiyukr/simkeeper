@@ -156,15 +156,38 @@ func (j *Jobs) alertChannelFailures(outcomes map[int64]*userOutcome, logf func(s
 		if len(oc.failed) == 0 || len(oc.succeeded) == 0 {
 			continue
 		}
+		names := make([]string, len(oc.failed))
+		for i, c := range oc.failed {
+			names[i] = channelLabel(c)
+		}
 		msg := "⚠️ 以下通知渠道在最近一轮提醒中投递失败：\n\n- " +
-			strings.Join(oc.failed, "\n- ") +
+			strings.Join(names, "\n- ") +
 			"\n\n请到「通知配置」检查对应渠道（测试发送可即时验证）。\n本告警通过仍正常的渠道发送；详情见通知历史。"
 		if err := j.sender.SendSystemAlert(uid, oc.succeeded, msg); err != nil {
 			logf("渠道失败告警发送失败(用户ID=%d): %v", uid, err)
 		} else {
-			logf("已向用户ID=%d 发送渠道失败告警（失败渠道: %s）", uid, strings.Join(oc.failed, ", "))
+			logf("已向用户ID=%d 发送渠道失败告警（失败渠道: %s）", uid, strings.Join(names, ", "))
 		}
 	}
+}
+
+// channelLabel 渠道标识的用户可读名称（告警文案用）。
+func channelLabel(c string) string {
+	switch c {
+	case "email":
+		return "邮件"
+	case "telegram":
+		return "Telegram"
+	case "wxpusher":
+		return "WxPusher"
+	case "feishu":
+		return "飞书"
+	case "dingtalk":
+		return "钉钉"
+	case "tgcall":
+		return "TG 电话"
+	}
+	return c
 }
 
 // retryFailed 重投 24 小时内失败的提醒通知：
