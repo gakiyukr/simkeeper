@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"simkeeper/internal/store"
 	"simkeeper/internal/tgcall"
@@ -249,6 +250,12 @@ type testResult struct {
 func (a *App) HandleSendTest(w http.ResponseWriter, r *http.Request) {
 	u := a.currentUser(r)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	// 节流：60 秒一次。TG 电话等渠道每次测试都是真实外呼，连点会触发平台限制
+	if ok, _ := a.Notify.LastTestWithin(u.ID, time.Now(), time.Minute); ok {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_ = json.NewEncoder(w).Encode(testResult{Success: false, Message: "测试发送过于频繁，请 1 分钟后再试"})
+		return
+	}
 	res := a.Sender.SendTest(u.ID, r.PostFormValue("preview"))
 	out := testResult{
 		Success: res.SentCount > 0,

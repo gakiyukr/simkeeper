@@ -164,3 +164,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     KEY idx_sessions_exp (expires_at),
     CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- schema 版本记录：此后每次不兼容结构变更递增版本号并配迁移代码
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version    INT      NOT NULL,
+    applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+INSERT IGNORE INTO schema_migrations (version) VALUES (1);

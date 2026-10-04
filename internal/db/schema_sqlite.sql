@@ -140,3 +140,10 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_exp  ON sessions(expires_at);
+
+-- schema 版本记录：此后每次不兼容结构变更递增版本号并配迁移代码
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version    INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+INSERT OR IGNORE INTO schema_migrations (version) VALUES (1);

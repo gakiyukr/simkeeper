@@ -219,6 +219,8 @@ func (a *App) HandleAdminExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b strings.Builder
+	// UTF-8 BOM：让 Excel 正确识别中文
+	b.WriteString("\xef\xbb\xbf")
 	b.WriteString("号码,用户ID,国家代码,国家,运营商,到期日,剩余天数,状态\n")
 	for _, n := range numbers {
 		b.WriteString(csvRow(n.PhoneNumber, strconv.FormatInt(n.UserID, 10), n.CountryCode,

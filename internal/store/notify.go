@@ -353,6 +353,17 @@ func (r *NotifyRepo) MarkFailedWithRetry(id int64, reason string) error {
 	return err
 }
 
+// LastTestWithin 用户最近是否发送过测试通知（节流：默认 60 秒一次，
+// 避免连点测试把 TG 电话等真实外呼渠道打爆）。
+func (r *NotifyRepo) LastTestWithin(userID int64, now time.Time, d time.Duration) (bool, error) {
+	var n int
+	err := r.DB.QueryRow(
+		"SELECT COUNT(*) FROM notifications WHERE user_id = ? AND type = 'test' AND created_at > ?",
+		userID, now.Add(-d).Format(time.DateTime),
+	).Scan(&n)
+	return n > 0, err
+}
+
 // HasNotificationToday 当天是否已给该号码发过指定类型的通知（幂等去重，防重复轰炸）。
 // 同日判定谓词方言化（见 Dialect.SameDay），参数传 "2006-01-02"。
 func (r *NotifyRepo) HasNotificationToday(numberID int64, typ string, now time.Time) (bool, error) {

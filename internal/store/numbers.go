@@ -124,10 +124,24 @@ func (r *NumberRepo) Delete(id, userID int64) error {
 	return err
 }
 
-// CountForUser 用户号码总数（用于 max_numbers_per_user 上限校验）。
+// CountForUser 用户使用中的号码数（用于 max_numbers_per_user 上限校验；
+// 已停用的号码不占配额）。
 func (r *NumberRepo) CountForUser(userID int64) (int, error) {
 	var n int
-	err := r.DB.QueryRow(`SELECT COUNT(*) FROM phone_numbers WHERE user_id = ?`, userID).Scan(&n)
+	err := r.DB.QueryRow(
+		"SELECT COUNT(*) FROM phone_numbers WHERE user_id = ? AND status = 'active'", userID,
+	).Scan(&n)
+	return n, err
+}
+
+// CountDuplicate 统计同一用户名下使用中的同号号码（excludeID 用于编辑时排除自身）。
+// 应用层查重：三方言的区分度索引策略不同（MySQL 无部分索引），统一在代码里做。
+func (r *NumberRepo) CountDuplicate(userID int64, phone string, excludeID int64) (int, error) {
+	var n int
+	err := r.DB.QueryRow(
+		"SELECT COUNT(*) FROM phone_numbers WHERE user_id = ? AND phone_number = ? AND status = 'active' AND id != ?",
+		userID, phone, excludeID,
+	).Scan(&n)
 	return n, err
 }
 

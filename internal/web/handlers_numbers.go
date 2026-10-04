@@ -287,6 +287,10 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	}
 	if existing != nil {
 		n.ID = existing.ID
+		if cnt, err := a.Numbers.CountDuplicate(userID, phone, n.ID); err == nil && cnt > 0 {
+			fail("该号码已存在于你的列表中")
+			return
+		}
 		if err := a.Numbers.Update(n); err != nil {
 			fail("保存失败，请重试")
 			return
@@ -297,6 +301,10 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		maxNumbers := a.Settings.GetInt("max_numbers_per_user", 50)
 		if cnt, err := a.Numbers.CountForUser(userID); err == nil && cnt >= maxNumbers {
 			fail("每个用户最多可添加 " + strconv.Itoa(maxNumbers) + " 个号码")
+			return
+		}
+		if cnt, err := a.Numbers.CountDuplicate(userID, phone, 0); err == nil && cnt > 0 {
+			fail("该号码已存在于你的列表中")
 			return
 		}
 		if _, err := a.Numbers.Create(n); err != nil {
@@ -382,6 +390,8 @@ func (a *App) HandleHistoryExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b strings.Builder
+	// UTF-8 BOM：让 Excel 正确识别中文
+	b.WriteString("\xef\xbb\xbf")
 	b.WriteString("号码,国家代码,国家,运营商,到期日,剩余天数,状态,充值金额,币种\n")
 	for _, n := range numbers {
 		b.WriteString(csvRow(n.PhoneNumber, n.CountryCode, n.CountryName, n.Carrier,
