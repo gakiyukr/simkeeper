@@ -1,6 +1,6 @@
 # 构建产物
-/baohaotong
-/baohaotong.exe
+/simkeeper
+/simkeeper.exe
 *.exe
 
 # 运行时数据
