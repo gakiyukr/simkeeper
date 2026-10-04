@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS users (
     email         TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     role          TEXT NOT NULL DEFAULT 'user'   CHECK (role   IN ('user', 'admin')),
+    totp_secret   TEXT,                          -- TOTP 两步验证密钥（Base32）；空 = 未设置
+    totp_enabled  INT    NOT NULL DEFAULT 0,     -- 验证器确认后置 1
     status        TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'banned')),
     created_at    TEXT NOT NULL DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'),
     updated_at    TEXT NOT NULL DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')

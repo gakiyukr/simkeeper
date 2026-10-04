@@ -18,6 +18,7 @@ func (a *App) Routes() http.Handler {
 	// ---- 未登录可达 ----
 	mux.HandleFunc("GET /login", a.handleLoginPage)
 	mux.Handle("POST /login", a.csrfProtect(a.HandleLogin))
+	mux.Handle("POST /login/totp", a.ensureSessionMW(a.csrfProtect(a.HandleLoginTOTP)))
 	mux.Handle("POST /logout", a.csrfProtect(a.HandleLogout))
 	mux.HandleFunc("GET /setup", a.handleSetupPage)
 	mux.Handle("POST /setup", a.csrfProtect(a.HandleSetup))
@@ -87,5 +88,12 @@ func (a *App) limitBody(n int64, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, n)
 		next(w, r)
+	}
+}
+
+// ensureSessionMW 为「访问者尚无会话」的请求兜底建匿名预会话（承载 CSRF 令牌）。
+func (a *App) ensureSessionMW(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		next(w, a.ensureSession(w, r))
 	}
 }

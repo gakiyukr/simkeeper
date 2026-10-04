@@ -33,6 +33,12 @@ var notificationConfigColumns = []ColumnSpec{
 	{Name: "tgcall_target", SQLiteType: "TEXT", MySQLType: "VARCHAR(64)", PGType: "TEXT"},
 }
 
+// userColumns users 表的历史演进列。
+var userColumns = []ColumnSpec{
+	{Name: "totp_secret", SQLiteType: "TEXT", MySQLType: "VARCHAR(64)", PGType: "TEXT"},
+	{Name: "totp_enabled", SQLiteType: "INTEGER NOT NULL DEFAULT 0", MySQLType: "TINYINT(1) NOT NULL DEFAULT 0", PGType: "INT NOT NULL DEFAULT 0"},
+}
+
 // existingColumns 列出表的现有列名。
 func (d *DB) existingColumns(table string) (map[string]bool, error) {
 	out := map[string]bool{}
@@ -122,6 +128,9 @@ func (d *DB) ensureColumns(table string, specs []ColumnSpec) (int, error) {
 // ALTER CHECK）。仅当你在新增渠道之前部署过本程序时才受影响——重建该表或
 // 重新初始化一次数据库即可；全新安装不受影响。
 func (d *DB) migrateExtra() error {
+	if _, err := d.ensureColumns("users", userColumns); err != nil {
+		return err
+	}
 	_, err := d.ensureColumns("notification_configs", notificationConfigColumns)
 	return err
 }

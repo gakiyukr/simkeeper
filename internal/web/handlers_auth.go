@@ -1,12 +1,19 @@
 package web
 
 import (
+	"crypto/subtle"
+	"encoding/base64"
+	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/skip2/go-qrcode"
+
 	"simkeeper/internal/auth"
+	"simkeeper/internal/secret"
 	"simkeeper/internal/store"
 )
 
@@ -80,6 +87,71 @@ func (a *App) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = a.Attempts.Clear(ip)
+
+	// 两步验证：密码通过后进入第二步，凭验证器验证码完成登录
+	if totpSecret, totpEnabled, err := a.Users.TOTPForUser(user.ID); err == nil && totpEnabled && totpSecret != "" {
+		a.startTOTPPending(w, user.ID, &d)
+		return
+	}
+	a.loginAs(w, r, user)
+}
+
+// startTOTPPending 密码已通过、等待两步验证：签发 2 分钟的待验证 Cookie
+// （服务端密钥 HMAC 签名，不可伪造），渲染验证码输入页。
+// 此时仍未建立登录会话——验证码通过才发正式会话。
+func (a *App) startTOTPPending(w http.ResponseWriter, userID int64, d *pageData) {
+	payload := fmt.Sprintf("%d|%d", userID, time.Now().Add(2*time.Minute).Unix())
+	http.SetCookie(w, &http.Cookie{
+		Name:     "SKTOTP",
+		Value:    payload + "|" + secret.MAC("totp-pending:"+payload),
+		Path:     "/login",
+		MaxAge:   120,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	a.render(w, http.StatusOK, "page_totp", *d)
+}
+
+// HandleLoginTOTP 登录第二步：校验验证器验证码，通过后正式建立会话。
+func (a *App) HandleLoginTOTP(w http.ResponseWriter, r *http.Request) {
+	d := a.baseData(r, "两步验证")
+	reject := func(msg string) {
+		d.Flash, d.FlashIsErr = msg, true
+		a.render(w, http.StatusUnauthorized, "page_totp", d)
+	}
+
+	c, err := r.Cookie("SKTOTP")
+	if err != nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	parts := strings.Split(c.Value, "|")
+	if len(parts) != 3 {
+		reject("登录状态已失效，请重新登录")
+		return
+	}
+	userID, err1 := strconv.ParseInt(parts[0], 10, 64)
+	expiry, err2 := strconv.ParseInt(parts[1], 10, 64)
+	if err1 != nil || err2 != nil ||
+		subtle.ConstantTimeCompare([]byte(secret.MAC("totp-pending:"+parts[0]+"|"+parts[1])), []byte(parts[2])) != 1 ||
+		time.Now().Unix() > expiry {
+		reject("登录状态已失效，请重新登录")
+		return
+	}
+
+	code := strings.TrimSpace(r.PostFormValue("code"))
+	totpSecret, enabled, err := a.Users.TOTPForUser(userID)
+	if err != nil || !enabled || !auth.VerifyTOTP(totpSecret, code) {
+		reject("验证码不正确")
+		return
+	}
+	user, err := a.Users.ByID(userID)
+	if err != nil || user.Status != "active" {
+		reject("账号不可用，请重新登录")
+		return
+	}
+	// 待验证 Cookie 用完即弃
+	http.SetCookie(w, &http.Cookie{Name: "SKTOTP", Value: "", Path: "/login", MaxAge: -1, HttpOnly: true})
 	a.loginAs(w, r, user)
 }
 
@@ -229,9 +301,74 @@ func (a *App) HandleProfile(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
+		} else if r.PostFormValue("totp_setup") != "" {
+			sec, err := auth.GenerateTOTPSecret()
+			if err != nil {
+				http.Error(w, "内部错误", http.StatusInternalServerError)
+				return
+			}
+			if err := a.Users.SetTOTP(u.ID, sec, false); err != nil {
+				d.Flash, d.FlashIsErr = "两步验证初始化失败", true
+			} else {
+				a.setFlash(w, "已生成密钥：请用验证器应用扫码或手动输入，再输入验证码确认启用", false)
+				http.Redirect(w, r, "/profile", http.StatusSeeOther)
+				return
+			}
+		} else if r.PostFormValue("totp_enable") != "" {
+			code := strings.TrimSpace(r.PostFormValue("totp_code"))
+			stored, enabled, err := a.Users.TOTPForUser(u.ID)
+			switch {
+			case err != nil || enabled:
+				d.Flash, d.FlashIsErr = "当前状态不允许启用", true
+			case !auth.VerifyTOTP(stored, code):
+				d.Flash, d.FlashIsErr = "验证码不正确，请确认验证器时间同步后重试", true
+			default:
+				if err := a.Users.SetTOTP(u.ID, stored, true); err != nil {
+					d.Flash, d.FlashIsErr = "两步验证启用失败", true
+				} else {
+					a.setFlash(w, "两步验证已启用：下次登录需要输入验证器验证码", false)
+					http.Redirect(w, r, "/profile", http.StatusSeeOther)
+					return
+				}
+			}
+		} else if r.PostFormValue("totp_disable") != "" {
+			code := strings.TrimSpace(r.PostFormValue("totp_code"))
+			stored, enabled, err := a.Users.TOTPForUser(u.ID)
+			switch {
+			case err != nil || !enabled:
+				d.Flash, d.FlashIsErr = "两步验证未启用", true
+			case !auth.VerifyTOTP(stored, code):
+				d.Flash, d.FlashIsErr = "验证码不正确", true
+			default:
+				if err := a.Users.SetTOTP(u.ID, "", false); err != nil {
+					d.Flash, d.FlashIsErr = "两步验证关闭失败", true
+				} else {
+					a.setFlash(w, "两步验证已关闭", false)
+					http.Redirect(w, r, "/profile", http.StatusSeeOther)
+					return
+				}
+			}
 		}
 	}
 
-	d.Content = map[string]any{"Email": u.Email}
+	d.Content = map[string]any{"Email": u.Email, "TOTP": a.totpView(u)}
 	a.render(w, http.StatusOK, "page_profile", d)
+}
+
+// totpView 个人设置页的两步验证状态与启用材料（QR 码 + 手动密钥 + otpauth 链接）。
+func (a *App) totpView(u *store.User) map[string]any {
+	stored, enabled, err := a.Users.TOTPForUser(u.ID)
+	if err != nil {
+		return map[string]any{"Enabled": false, "Err": true}
+	}
+	view := map[string]any{"Enabled": enabled}
+	if !enabled && stored != "" {
+		uri := auth.OTPAuthURI("SimKeeper", u.Username, stored)
+		view["Secret"] = stored
+		view["URI"] = uri
+		if png, err := qrcode.Encode(uri, qrcode.Medium, 220); err == nil {
+			view["QR"] = "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+		}
+	}
+	return view
 }

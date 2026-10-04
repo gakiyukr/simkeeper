@@ -7,6 +7,7 @@ import (
 
 	"simkeeper/internal/auth"
 	"simkeeper/internal/db"
+	"simkeeper/internal/secret"
 )
 
 // ErrNotFound 数据记录不存在时的统一错误。
@@ -115,6 +116,37 @@ func (r *UserRepo) SetRole(id int64, role string) error {
 // Delete 删除用户；号码与通知记录由外键级联清理。
 func (r *UserRepo) Delete(id int64) error {
 	_, err := r.DB.Exec(`DELETE FROM users WHERE id = ?`, id)
+	return err
+}
+
+// TOTPForUser 读取两步验证配置（secret 解密）；用户不存在返回 ErrNotFound。
+func (r *UserRepo) TOTPForUser(id int64) (totpSecret string, enabled bool, err error) {
+	var s sql.NullString
+	var e int
+	err = r.DB.QueryRow(
+		`SELECT COALESCE(totp_secret,''), COALESCE(totp_enabled,0) FROM users WHERE id = ?`, id,
+	).Scan(&s, &e)
+	if err != nil {
+		return "", false, err
+	}
+	plain, derr := secret.Decrypt(s.String)
+	if derr != nil {
+		// 密钥不匹配等：按未设置处理，用户可重新生成
+		return "", false, nil
+	}
+	return plain, e == 1 && plain != "", nil
+}
+
+// SetTOTP 写入或清除两步验证配置（secret 加密落库；enabled=false 时应同时清空 secret）。
+func (r *UserRepo) SetTOTP(id int64, totpSecret string, enabled bool) error {
+	enc, err := secret.Encrypt(totpSecret)
+	if err != nil {
+		return err
+	}
+	_, err = r.DB.Exec(
+		`UPDATE users SET totp_secret = ?, totp_enabled = ?, updated_at = ? WHERE id = ?`,
+		nullStr(enc), boolInt(enabled), db.Touch(time.Now()), id,
+	)
 	return err
 }
 
