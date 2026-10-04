@@ -39,11 +39,15 @@ type App struct {
 	// TrustProxy 决定是否信任 X-Forwarded-For 取真实 IP。
 	// 部署在可信反代之后时由配置开启；默认关闭，避免伪造头绕过限流。
 	TrustProxy bool
+	// SecureCookies 强制给会话 Cookie 加 Secure 标记。
+	// 直连 TLS 时程序能从 r.TLS 自行判断；TLS 由反向代理终结时
+	// 程序看到的是 HTTP，需要部署侧显式开启（-secure-cookies）。
+	SecureCookies bool
 }
 
 // New 构造 App 并解析内嵌模板。
 func New(database *db.DB) (*App, error) {
-	tmpl, err := template.New("bht").Funcs(funcMap).ParseFS(tmplFS, "templates/*.html")
+	tmpl, err := template.New("sk").Funcs(funcMap).ParseFS(tmplFS, "templates/*.html")
 	if err != nil {
 		return nil, err
 	}
@@ -63,14 +67,14 @@ func New(database *db.DB) (*App, error) {
 // ClientIP 提取客户端 IP。
 // TrustProxy=false 时只认 RemoteAddr，不解析 X-Forwarded-For
 // （修复 PHP 版无条件信任请求头的问题）。
+// TrustProxy=true 时取 X-Forwarded-For 链**最右侧**地址：客户端可以伪造
+// XFF 的任意前缀，只有反向代理追加的最右一跳不可伪造；单层可信反代下
+// 即真实客户端 IP。多层代理部署请在上游收敛该头，或自行扩展信任逻辑。
 func (a *App) ClientIP(r *http.Request) string {
 	if a.TrustProxy {
 		if xf := r.Header.Get("X-Forwarded-For"); xf != "" {
-			// 取链路第一个（最原始客户端）
-			if i := strings.IndexByte(xf, ','); i > 0 {
-				xf = xf[:i]
-			}
-			return strings.TrimSpace(xf)
+			parts := strings.Split(xf, ",")
+			return strings.TrimSpace(parts[len(parts)-1])
 		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -93,7 +97,8 @@ func (a *App) currentSession(r *http.Request) *auth.Session {
 }
 
 // sessionCookie 会话 Cookie 的统一属性。
-// Secure 依请求是否为 TLS 决定，不读 X-Forwarded-Proto（修复 PHP 版问题）。
+// Secure 在两种情况下开启：程序直连 TLS（r.TLS 非空），
+// 或部署侧显式开启 SecureCookies（TLS 由反向代理终结的场景）。
 func (a *App) sessionCookie(r *http.Request, token string, maxAge int) *http.Cookie {
 	return &http.Cookie{
 		Name:     "SKSESSION",
@@ -101,7 +106,7 @@ func (a *App) sessionCookie(r *http.Request, token string, maxAge int) *http.Coo
 		Path:     "/",
 		MaxAge:   maxAge,
 		HttpOnly: true,
-		Secure:   r.TLS != nil,
+		Secure:   r.TLS != nil || a.SecureCookies,
 		SameSite: http.SameSiteLaxMode,
 	}
 }

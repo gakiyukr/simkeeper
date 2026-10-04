@@ -57,18 +57,20 @@ func main() {
 		addr = flag.String("addr", envOr("SK_ADDR", "127.0.0.1:8080"),
 			"HTTP 监听地址")
 		trustProxy = flag.Bool("trust-proxy", envOr("SK_TRUST_PROXY", "") == "1",
-			"信任 X-Forwarded-For 头（部署在可信反向代理之后时开启，用于登录限流的 IP 归属）")
+			"信任 X-Forwarded-For 头（部署在可信反向代理之后时开启，用于登录限流的 IP 归属；取链最右值，客户端伪造的前缀无效）")
+		secureCookies = flag.Bool("secure-cookies", envOr("SK_SECURE_COOKIES", "") == "1",
+			"会话 Cookie 强制加 Secure 标记（TLS 由反向代理终结时必须开启）")
 		cronInterval = flag.Duration("cron-interval", durationOr("SK_CRON_INTERVAL", time.Hour),
 			"定时任务执行间隔（如 30m、1h）；0 表示禁用进程内调度，仅保留管理后台手动触发")
 	)
 	flag.Parse()
 
-	if err := run(*driver, *dbPath, *dsn, *addr, *trustProxy, *cronInterval); err != nil {
+	if err := run(*driver, *dbPath, *dsn, *addr, *trustProxy, *secureCookies, *cronInterval); err != nil {
 		log.Fatalf("[main] %v", err)
 	}
 }
 
-func run(driver, dbPath, dsn, addr string, trustProxy bool, cronInterval time.Duration) error {
+func run(driver, dbPath, dsn, addr string, trustProxy, secureCookies bool, cronInterval time.Duration) error {
 	if driver == db.DialectSQLite {
 		// SQLite 的「连接串」就是文件路径，目录按需创建
 		if dir := filepath.Dir(dbPath); dir != "" && dir != "." {
@@ -92,9 +94,15 @@ func run(driver, dbPath, dsn, addr string, trustProxy bool, cronInterval time.Du
 		return fmt.Errorf("初始化应用失败: %w", err)
 	}
 	app.TrustProxy = trustProxy
+	app.SecureCookies = secureCookies
 	if err := app.Settings.SeedDefaults(); err != nil {
 		return fmt.Errorf("写入默认设置失败: %w", err)
 	}
+
+	// 时区自检：提醒的「当天」判断依赖本地时区，部署时区错了提醒会错位
+	zoneName, offset := time.Now().Zone()
+	log.Printf("[main] 本地时区: %s (UTC%+03d:%02d) — 与预期不符请设置 TZ 环境变量",
+		zoneName, offset/3600, (offset%3600)/60)
 
 	if _, total, err := app.Users.List(1, 1, ""); err == nil && total == 0 {
 		log.Printf("[main] 系统还没有账号：请访问 http://%s/setup 创建管理员（创建后入口自动关闭）", addr)
@@ -111,7 +119,7 @@ func run(driver, dbPath, dsn, addr string, trustProxy bool, cronInterval time.Du
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
-		log.Printf("[main] SimKeeper已启动（驱动 %s）: http://%s", driver, addr)
+		log.Printf("[main] SimKeeper 已启动（驱动 %s）: http://%s", driver, addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("[main] HTTP 服务异常退出: %v", err)
 		}
