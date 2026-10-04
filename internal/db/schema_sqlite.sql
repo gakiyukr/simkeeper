@@ -97,6 +97,19 @@ CREATE INDEX IF NOT EXISTS idx_notif_number    ON notifications(phone_number_id)
 CREATE INDEX IF NOT EXISTS idx_notif_status    ON notifications(status);
 CREATE INDEX IF NOT EXISTS idx_notif_created   ON notifications(created_at);
 
+
+-- 密码重置令牌：只存 SHA-256 哈希（原文仅存在于邮件链接），1 小时有效、单次使用
+CREATE TABLE IF NOT EXISTS password_resets (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT    NOT NULL,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+    expires_at TEXT    NOT NULL,
+    used_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_presets_token ON password_resets(token_hash);
+CREATE INDEX IF NOT EXISTS idx_presets_user  ON password_resets(user_id);
+
 CREATE TABLE IF NOT EXISTS system_settings (
     setting_key   TEXT PRIMARY KEY,
     setting_value TEXT,

@@ -1,0 +1,17 @@
+{{define "page_forgot"}}{{template "head" .}}
+<div class="card" style="max-width:460px;margin:2rem auto">
+  <div class="card-h">找回密码</div>
+  <div class="card-b">
+    <p class="muted">输入账号邮箱，重置链接将通过站点配置的邮件渠道发送（1 小时内有效，仅可使用一次）。</p>
+    <form method="post" action="/forgot">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="field">
+        <label>账号邮箱</label>
+        <input type="email" name="email" required autofocus>
+      </div>
+      <button type="submit" class="btn" style="width:100%">发送重置邮件</button>
+    </form>
+    <p style="text-align:center;margin:.8rem 0 0"><a href="/login">返回登录</a></p>
+  </div>
+</div>
+{{template "foot" .}}{{end}}

@@ -1,12 +1,14 @@
 package web
 
 import (
+	crand "crypto/rand"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"simkeeper/internal/auth"
 	"simkeeper/internal/cronjob"
 	"simkeeper/internal/store"
 )
@@ -134,6 +136,28 @@ func (a *App) adminUserAction(w http.ResponseWriter, r *http.Request, myID int64
 			return
 		}
 		back("用户已解禁", false)
+	case "resetpw":
+		// 管理员重置密码：生成随机临时密码，仅本次通过提示显示
+		const charset = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
+		raw := make([]byte, 12)
+		if _, err := crand.Read(raw); err != nil {
+			back("生成临时密码失败", true)
+			return
+		}
+		for i := range raw {
+			raw[i] = charset[int(raw[i])%len(charset)]
+		}
+		newHash, err := auth.HashPassword(string(raw))
+		if err != nil {
+			back("内部错误", true)
+			return
+		}
+		if err := a.Users.UpdatePassword(targetID, newHash); err != nil {
+			back("重置失败", true)
+			return
+		}
+		_ = a.Sessions.DestroyForUser(targetID)
+		back("已重置 "+target.Username+" 的密码，临时密码："+string(raw)+"（仅显示一次，请立即转告用户登录修改）", false)
 	case "role":
 		role := r.PostFormValue("role")
 		if role != "user" && role != "admin" {

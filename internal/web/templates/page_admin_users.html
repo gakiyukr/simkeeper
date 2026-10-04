@@ -54,6 +54,13 @@
                 <button type="submit" class="btn btn-sm btn-ghost">调整角色</button>
               </form>
               <form method="post" action="/admin/users" class="inline"
+                    onsubmit="return confirm('确定重置 {{.Username}} 的密码吗？将生成随机临时密码并踢掉其全部会话。')">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <input type="hidden" name="action" value="resetpw">
+                <input type="hidden" name="user_id" value="{{.ID}}">
+                <button type="submit" class="btn btn-sm btn-ghost">重置密码</button>
+              </form>
+              <form method="post" action="/admin/users" class="inline"
                     onsubmit="return confirm('确定删除用户 {{.Username}} 吗？其号码与通知记录将一并删除。')">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <input type="hidden" name="action" value="delete">

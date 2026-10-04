@@ -22,6 +22,10 @@ func (a *App) Routes() http.Handler {
 	mux.Handle("POST /logout", a.csrfProtect(a.HandleLogout))
 	mux.HandleFunc("GET /setup", a.handleSetupPage)
 	mux.Handle("POST /setup", a.csrfProtect(a.HandleSetup))
+	mux.HandleFunc("GET /forgot", a.handleForgotPage)
+	mux.Handle("POST /forgot", a.ensureSessionMW(a.csrfProtect(a.HandleForgot)))
+	mux.HandleFunc("GET /reset", a.handleResetPage)
+	mux.Handle("POST /reset", a.ensureSessionMW(a.csrfProtect(a.HandleReset)))
 
 	// ---- 用户侧 ----
 	mux.Handle("GET /", a.requireLogin(a.HandleDashboard))
@@ -96,4 +100,14 @@ func (a *App) ensureSessionMW(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		next(w, a.ensureSession(w, r))
 	}
+}
+
+// handleForgotPage GET /forgot
+func (a *App) handleForgotPage(w http.ResponseWriter, r *http.Request) {
+	a.ensureSessionMW(a.HandleForgot)(w, r)
+}
+
+// handleResetPage GET /reset
+func (a *App) handleResetPage(w http.ResponseWriter, r *http.Request) {
+	a.ensureSessionMW(a.HandleReset)(w, r)
 }

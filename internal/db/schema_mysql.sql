@@ -115,6 +115,21 @@ CREATE TABLE IF NOT EXISTS notifications (
     CONSTRAINT fk_notif_number FOREIGN KEY (phone_number_id) REFERENCES phone_numbers(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- 密码重置令牌：只存 SHA-256 哈希（原文仅存在于邮件链接），1 小时有效、单次使用
+CREATE TABLE IF NOT EXISTS password_resets (
+    id         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id    INT UNSIGNED NOT NULL,
+    token_hash CHAR(64)     NOT NULL,
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME     NOT NULL,
+    used_at    DATETIME     NULL,
+    PRIMARY KEY (id),
+    KEY idx_presets_token (token_hash),
+    KEY idx_presets_user (user_id),
+    CONSTRAINT fk_presets_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS system_settings (
     setting_key   VARCHAR(100) NOT NULL,
     setting_value TEXT         NULL,

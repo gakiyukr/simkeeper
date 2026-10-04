@@ -35,6 +35,7 @@ type App struct {
 	Sessions *auth.SessionStore
 	Sender   *notify.Sender
 	Attempts *store.LoginAttemptRepo
+	Resets   *store.PasswordResetRepo
 	Tmpl     *template.Template
 	// TrustProxy 决定是否信任 X-Forwarded-For 取真实 IP。
 	// 部署在可信反代之后时由配置开启；默认关闭，避免伪造头绕过限流。
@@ -59,6 +60,7 @@ func New(database *db.DB) (*App, error) {
 		Settings: &store.SettingRepo{DB: database},
 		Sessions: &auth.SessionStore{DB: database},
 		Attempts: &store.LoginAttemptRepo{DB: database},
+		Resets:   &store.PasswordResetRepo{DB: database},
 		Sender:   &notify.Sender{Notify: &store.NotifyRepo{DB: database}, Users: &store.UserRepo{DB: database}},
 		Tmpl:     tmpl,
 	}, nil
