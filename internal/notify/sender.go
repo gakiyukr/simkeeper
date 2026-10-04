@@ -3,6 +3,7 @@ package notify
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -24,6 +25,9 @@ type Result struct {
 	SentCount     int
 	TotalChannels int
 	Errors        []string
+	// 渠道级结果：定时任务据此判断是否发「渠道失效告警」
+	SucceededChannels []string
+	FailedChannels    []string
 }
 
 // SubjectFor 生成渠道主题；语义与 PHP 版一致。
@@ -55,7 +59,7 @@ func (s *Sender) SendToEnabledChannels(userID, numberID int64, typ, message stri
 
 	subject := SubjectFor(typ)
 
-	// send 记录结果并统计；errors 收集失败原因
+	// send 落一条记录、执行发送并按结果更新状态；渠道明细供告警使用
 	send := func(channel string, do func() error) {
 		res.TotalChannels++
 		id, err := s.Notify.Record(userID, numberID, typ, channel, subject, message)
@@ -66,13 +70,28 @@ func (s *Sender) SendToEnabledChannels(userID, numberID int64, typ, message stri
 		if sendErr := do(); sendErr != nil {
 			_ = s.Notify.MarkFailed(id, sendErr.Error())
 			res.Errors = append(res.Errors, channel+": "+sendErr.Error())
+			res.FailedChannels = append(res.FailedChannels, channel)
 		} else {
 			_ = s.Notify.MarkSent(id)
 			res.SentCount++
+			res.SucceededChannels = append(res.SucceededChannels, channel)
 		}
 	}
 
-	if cfg.EmailEnabled {
+	for _, channel := range []string{"email", "telegram", "wxpusher", "feishu", "dingtalk", "tgcall"} {
+		if !cfg.ChannelEnabled(channel) {
+			continue
+		}
+		send(channel, func() error { return s.sendOne(user, cfg, channel, subject, message) })
+	}
+
+	return res
+}
+
+// sendOne 向单个渠道发送；SendToEnabledChannels、重投与系统告警共用。
+func (s *Sender) sendOne(user *store.User, cfg *store.NotifyConfig, channel, subject, message string) error {
+	switch channel {
+	case "email":
 		to := cfg.EmailToEmail
 		if to == "" {
 			to = user.Email
@@ -86,37 +105,71 @@ func (s *Sender) SendToEnabledChannels(userID, numberID int64, typ, message stri
 			From:     cfg.EmailFromEmail,
 			FromName: cfg.EmailFromName,
 		}
-		send("email", func() error {
-			return SendEmail(ecfg, to, subject, FormatEmailBody(message), message)
-		})
+		return SendEmail(ecfg, to, subject, FormatEmailBody(message), message)
+	case "telegram":
+		return SendTelegram(s.HTTPClient, TelegramConfig{BotToken: cfg.TelegramBotToken, ChatID: cfg.TelegramChatID}, message)
+	case "wxpusher":
+		return SendWxPusher(s.HTTPClient, WxPusherConfig{AppToken: cfg.WxPusherAppToken, UID: cfg.WxPusherUID}, subject, message)
+	case "feishu":
+		return SendFeishu(s.HTTPClient, FeishuConfig{Webhook: cfg.FeishuWebhook, Secret: cfg.FeishuSecret}, message)
+	case "dingtalk":
+		return SendDingTalk(s.HTTPClient, DingTalkConfig{Webhook: cfg.DingTalkWebhook, Secret: cfg.DingTalkSecret}, message)
+	case "tgcall":
+		return s.placeMissedCall(user.ID, cfg)
 	}
+	return fmt.Errorf("未知渠道: %s", channel)
+}
 
-	if cfg.TelegramEnabled {
-		tcfg := TelegramConfig{BotToken: cfg.TelegramBotToken, ChatID: cfg.TelegramChatID}
-		send("telegram", func() error { return SendTelegram(s.HTTPClient, tcfg, message) })
+// SendOneChannel 针对一条已有失败记录的重投：只发原渠道。
+// 渠道已被用户停用时返回错误（调用方会计入重试次数）。
+func (s *Sender) SendOneChannel(userID int64, typ, channel, message string) error {
+	user, err := s.Users.ByID(userID)
+	if err != nil {
+		return fmt.Errorf("用户不存在")
 	}
-
-	if cfg.WxPusherEnabled {
-		wcfg := WxPusherConfig{AppToken: cfg.WxPusherAppToken, UID: cfg.WxPusherUID}
-		send("wxpusher", func() error { return SendWxPusher(s.HTTPClient, wcfg, subject, message) })
+	cfg, err := s.Notify.ConfigForUser(userID)
+	if err != nil {
+		return err
 	}
-
-	if cfg.FeishuEnabled {
-		fcfg := FeishuConfig{Webhook: cfg.FeishuWebhook, Secret: cfg.FeishuSecret}
-		send("feishu", func() error { return SendFeishu(s.HTTPClient, fcfg, message) })
+	if cfg.IsZero() || !cfg.ChannelEnabled(channel) {
+		return fmt.Errorf("渠道已停用，不再重试")
 	}
+	return s.sendOne(user, cfg, channel, SubjectFor(typ), message)
+}
 
-	if cfg.DingTalkEnabled {
-		dcfg := DingTalkConfig{Webhook: cfg.DingTalkWebhook, Secret: cfg.DingTalkSecret}
-		send("dingtalk", func() error { return SendDingTalk(s.HTTPClient, dcfg, message) })
+// SendSystemAlert 通过指定渠道发送系统告警（渠道投递失败提醒）。
+// 告警不打 TG 电话；逐渠道落 type=system 记录。
+func (s *Sender) SendSystemAlert(userID int64, channels []string, message string) error {
+	user, err := s.Users.ByID(userID)
+	if err != nil {
+		return err
 	}
-
-	if cfg.TGCallEnabled {
-		// 电话没有文本内容，message 仅作留档
-		send("tgcall", func() error { return s.placeMissedCall(userID, cfg) })
+	cfg, err := s.Notify.ConfigForUser(userID)
+	if err != nil {
+		return err
 	}
-
-	return res
+	subject := "⚠️ SimKeeper 渠道投递失败告警"
+	var errs []string
+	for _, ch := range channels {
+		if ch == "tgcall" {
+			continue // 告警不打电话
+		}
+		id, err := s.Notify.Record(userID, 0, "system", ch, subject, message)
+		if err != nil {
+			errs = append(errs, ch+": 写入记录失败")
+			continue
+		}
+		if sendErr := s.sendOne(user, cfg, ch, subject, message); sendErr != nil {
+			_ = s.Notify.MarkFailed(id, sendErr.Error())
+			errs = append(errs, ch+": "+sendErr.Error())
+		} else {
+			_ = s.Notify.MarkSent(id)
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("%s", strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 // placeMissedCall 执行一次 TG 未接来电；会话若被刷新则回存数据库。

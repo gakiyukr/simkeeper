@@ -33,6 +33,11 @@ var notificationConfigColumns = []ColumnSpec{
 	{Name: "tgcall_target", SQLiteType: "TEXT", MySQLType: "VARCHAR(64)", PGType: "TEXT"},
 }
 
+// notificationColumns notifications 表的历史演进列。
+var notificationColumns = []ColumnSpec{
+	{Name: "retry_count", SQLiteType: "INTEGER NOT NULL DEFAULT 0", MySQLType: "INT NOT NULL DEFAULT 0", PGType: "INT NOT NULL DEFAULT 0"},
+}
+
 // userColumns users 表的历史演进列。
 var userColumns = []ColumnSpec{
 	{Name: "totp_secret", SQLiteType: "TEXT", MySQLType: "VARCHAR(64)", PGType: "TEXT"},
@@ -129,6 +134,9 @@ func (d *DB) ensureColumns(table string, specs []ColumnSpec) (int, error) {
 // 重新初始化一次数据库即可；全新安装不受影响。
 func (d *DB) migrateExtra() error {
 	if _, err := d.ensureColumns("users", userColumns); err != nil {
+		return err
+	}
+	if _, err := d.ensureColumns("notifications", notificationColumns); err != nil {
 		return err
 	}
 	_, err := d.ensureColumns("notification_configs", notificationConfigColumns)

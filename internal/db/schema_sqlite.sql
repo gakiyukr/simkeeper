@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     subject         TEXT,
     message         TEXT    NOT NULL,
     status          TEXT    NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed')),
+    retry_count     INTEGER NOT NULL DEFAULT 0,   -- 定时任务重投次数（上限 3）
     error_message   TEXT,
     sent_at         TEXT,
     created_at      TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))

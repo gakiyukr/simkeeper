@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"simkeeper/internal/auth"
@@ -75,13 +76,18 @@ func (j *Jobs) RunOnce(now time.Time) (sent, failed int, lines []string) {
 	if err != nil {
 		logf("读取号码失败: %v", err)
 	} else {
-		sent, failed = j.sendDueNotifications(numbers, now, logf)
+		var outcomes map[int64]*userOutcome
+		outcomes, sent, failed = j.sendDueNotifications(numbers, now, logf)
+		j.alertChannelFailures(outcomes, logf)
 	}
 
-	// 3. 清理：通知记录按保留天数、登录失败记录按 7 天、会话按过期时间
+	// 3. 重投：24 小时内失败的提醒通知，按失败后 1/2/3 小时的节奏重试，最多 3 次
+	j.retryFailed(now, &sent, &failed, logf)
+
+	// 4. 清理：通知记录按保留天数、登录失败记录按 7 天、会话按过期时间
 	j.cleanup(logf)
 
-	// 4. 统计与最后执行时间
+	// 5. 统计与最后执行时间
 	j.recordStats(sent, failed, now, logf)
 
 	logf("=== 定时任务执行结束 ===")
@@ -91,7 +97,14 @@ func (j *Jobs) RunOnce(now time.Time) (sent, failed int, lines []string) {
 // sendDueNotifications 找出进入提醒窗口的号码并分发，返回 (成功, 失败) 条数。
 // 续费与使用两类提醒相互独立：同一号码可能同时进入两个窗口，各发一条
 // （与 PHP 版两条独立查询的行为一致），去重按（号码, 类型, 当天）维度。
-func (j *Jobs) sendDueNotifications(numbers []store.PhoneNumber, now time.Time, logf func(string, ...any)) (sent, failed int) {
+// userOutcome 汇总单个用户本轮的渠道投递结果。
+type userOutcome struct {
+	succeeded, failed []string
+}
+
+func (j *Jobs) sendDueNotifications(numbers []store.PhoneNumber, now time.Time, logf func(string, ...any)) (map[int64]*userOutcome, int, int) {
+	outcomes := map[int64]*userOutcome{}
+	sent, failed := 0, 0
 	for _, n := range numbers {
 		days := n.DaysLeft(now)
 		if days < 0 {
@@ -114,10 +127,17 @@ func (j *Jobs) sendDueNotifications(numbers []store.PhoneNumber, now time.Time, 
 			if done {
 				continue
 			}
-			logf("发送%s通知: 用户ID=%d, 号码=%s", typeLabel(typ), n.UserID, n.PhoneNumber)
+			logf("发送%s通知: 用户ID=%d, 号码ID=%d", typeLabel(typ), n.UserID, n.ID)
 			res := j.sender.SendToEnabledChannels(n.UserID, n.ID, typ, buildMessage(typ, n, now))
 			sent += res.SentCount
 			failed += res.TotalChannels - res.SentCount
+			oc, ok := outcomes[n.UserID]
+			if !ok {
+				oc = &userOutcome{}
+				outcomes[n.UserID] = oc
+			}
+			oc.succeeded = append(oc.succeeded, res.SucceededChannels...)
+			oc.failed = append(oc.failed, res.FailedChannels...)
 			for _, e := range res.Errors {
 				logf("%s通知未送达部分渠道: %s", typeLabel(typ), e)
 			}
@@ -125,7 +145,67 @@ func (j *Jobs) sendDueNotifications(numbers []store.PhoneNumber, now time.Time, 
 			time.Sleep(time.Second)
 		}
 	}
-	return sent, failed
+	return outcomes, sent, failed
+}
+
+// alertChannelFailures 同一用户本轮「有渠道失败且仍有渠道成功」时，
+// 通过成功渠道发一条系统告警——防止渠道静默失效数月无人发现。
+// 全部渠道都失败时无法告警（已知限制），由日志与管理端失败统计兜底。
+func (j *Jobs) alertChannelFailures(outcomes map[int64]*userOutcome, logf func(string, ...any)) {
+	for uid, oc := range outcomes {
+		if len(oc.failed) == 0 || len(oc.succeeded) == 0 {
+			continue
+		}
+		msg := "⚠️ 以下通知渠道在最近一轮提醒中投递失败：\n\n- " +
+			strings.Join(oc.failed, "\n- ") +
+			"\n\n请到「通知配置」检查对应渠道（测试发送可即时验证）。\n本告警通过仍正常的渠道发送；详情见通知历史。"
+		if err := j.sender.SendSystemAlert(uid, oc.succeeded, msg); err != nil {
+			logf("渠道失败告警发送失败(用户ID=%d): %v", uid, err)
+		} else {
+			logf("已向用户ID=%d 发送渠道失败告警（失败渠道: %s）", uid, strings.Join(oc.failed, ", "))
+		}
+	}
+}
+
+// retryFailed 重投 24 小时内失败的提醒通知：
+// 第 1/2/3 次重试分别发生在失败后约 1/2/3 小时（按记录创建时间推算），
+// 超过窗口或渠道已停用则自然终止。test 类型与已删除号码的记录跳过。
+func (j *Jobs) retryFailed(now time.Time, sent, failed *int, logf func(string, ...any)) {
+	recs, err := j.notify.FailedForRetry(now, 24*time.Hour, 3)
+	if err != nil {
+		logf("读取待重投通知失败: %v", err)
+		return
+	}
+	retried := 0
+	for _, rec := range recs {
+		created, err := time.ParseInLocation(time.DateTime, rec.CreatedAt, now.Location())
+		if err != nil {
+			continue
+		}
+		age := now.Sub(created)
+		if age < time.Duration(rec.RetryCount+1)*time.Hour {
+			continue
+		}
+		if !rec.PhoneNumberID.Valid {
+			continue
+		}
+		logf("重投%s通知: 用户ID=%d, 号码ID=%d (第 %d/%d 次)",
+			typeLabel(rec.Type), rec.UserID, rec.PhoneNumberID.Int64, rec.RetryCount+1, 3)
+		if sendErr := j.sender.SendOneChannel(rec.UserID, rec.Type, rec.Channel, rec.Message); sendErr != nil {
+			_ = j.notify.MarkFailedWithRetry(rec.ID, sendErr.Error())
+			*failed++
+			logf("重投失败: %v", sendErr)
+		} else {
+			_ = j.notify.MarkSent(rec.ID)
+			*sent++
+			retried++
+			logf("重投成功")
+		}
+		time.Sleep(time.Second)
+	}
+	if retried > 0 {
+		logf("重投成功 %d 条", retried)
+	}
 }
 
 // cleanup 清理过期数据，失败只记日志。
@@ -192,7 +272,8 @@ func buildMessage(typ string, n store.PhoneNumber, now time.Time) string {
 // 停止条件为 ctx 取消；间隔取值默认 1 小时，由 main 传入。
 func (j *Jobs) Start(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
-		log.Printf("[cron] 后台调度已禁用（仅管理后台手动触发）")
+		log.Printf("[cron] 提醒调度已禁用（仅管理后台手动触发）；数据清理仍每日运行")
+		go j.gcLoop(ctx, 24*time.Hour)
 		return
 	}
 	go func() {
@@ -210,4 +291,22 @@ func (j *Jobs) Start(ctx context.Context, interval time.Duration) {
 			}
 		}
 	}()
+}
+
+// gcLoop 独立于提醒调度的清理循环：会话与登录失败记录不会因
+// 关闭调度而无限增长。
+func (j *Jobs) gcLoop(ctx context.Context, every time.Duration) {
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_ = j.sessions.GC()
+			_ = j.attempts.GC()
+			_, _ = j.notify.CleanupExpired(j.settings.GetInt("log_retention_days", 90))
+			log.Printf("[cron] 每日清理完成")
+		}
+	}
 }

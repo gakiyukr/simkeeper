@@ -45,6 +45,25 @@ type NotifyConfig struct {
 // IsZero 用户尚未建立配置行。
 func (c *NotifyConfig) IsZero() bool { return c == nil || c.UserID == 0 }
 
+// ChannelEnabled 报告渠道是否已启用。
+func (c *NotifyConfig) ChannelEnabled(channel string) bool {
+	switch channel {
+	case "email":
+		return c.EmailEnabled
+	case "telegram":
+		return c.TelegramEnabled
+	case "wxpusher":
+		return c.WxPusherEnabled
+	case "feishu":
+		return c.FeishuEnabled
+	case "dingtalk":
+		return c.DingTalkEnabled
+	case "tgcall":
+		return c.TGCallEnabled
+	}
+	return false
+}
+
 // NotifyRepo 通知配置与通知记录数据访问。
 type NotifyRepo struct {
 	DB *db.DB
@@ -252,6 +271,7 @@ type Notification struct {
 	ErrorMessage  string
 	SentAt        string
 	CreatedAt     string
+	RetryCount    int // 定时任务重投次数
 	// 联表展示字段（仅 List 时填充）
 	Username    string
 	PhoneNumber string
@@ -293,6 +313,41 @@ func (r *NotifyRepo) MarkSent(id int64) error {
 func (r *NotifyRepo) MarkFailed(id int64, reason string) error {
 	_, err := r.DB.Exec(
 		`UPDATE notifications SET status='failed', error_message=? WHERE id=?`,
+		reason, id,
+	)
+	return err
+}
+
+// FailedForRetry 列出可重投的失败提醒：24 小时窗口内、类型为 renewal/usage、
+// 重试次数未达上限的记录（test 类型不重试）。
+func (r *NotifyRepo) FailedForRetry(now time.Time, window time.Duration, maxRetry int) ([]Notification, error) {
+	cutoff := now.Add(-window).Format(time.DateTime)
+	rows, err := r.DB.Query(
+		`SELECT id, user_id, phone_number_id, type, channel, COALESCE(message,''), COALESCE(retry_count,0)
+		 FROM notifications
+		 WHERE status = 'failed' AND type IN ('renewal','usage')
+		   AND retry_count < ? AND created_at >= ?`,
+		maxRetry, cutoff,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Notification
+	for rows.Next() {
+		var n Notification
+		if err := rows.Scan(&n.ID, &n.UserID, &n.PhoneNumberID, &n.Type, &n.Channel, &n.Message, &n.RetryCount); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// MarkFailedWithRetry 标记重投失败：记录原因并递增重试计数。
+func (r *NotifyRepo) MarkFailedWithRetry(id int64, reason string) error {
+	_, err := r.DB.Exec(
+		`UPDATE notifications SET status='failed', error_message=?, retry_count=COALESCE(retry_count,0)+1 WHERE id=?`,
 		reason, id,
 	)
 	return err
