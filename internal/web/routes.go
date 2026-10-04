@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"baohaotong/internal/auth"
+	"simkeeper/internal/auth"
 )
 
 // Routes 构建路由表。整体包一层 sessionMiddleware：

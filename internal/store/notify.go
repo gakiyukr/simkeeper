@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"time"
 
-	"baohaotong/internal/db"
+	"simkeeper/internal/db"
 )
 
 // NotifyConfig 对应 notification_configs 表，一行 = 一个用户的全部渠道配置。

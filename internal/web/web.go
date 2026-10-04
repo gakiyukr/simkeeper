@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"baohaotong/internal/auth"
-	"baohaotong/internal/db"
-	"baohaotong/internal/notify"
-	"baohaotong/internal/store"
+	"simkeeper/internal/auth"
+	"simkeeper/internal/db"
+	"simkeeper/internal/notify"
+	"simkeeper/internal/store"
 )
 
 // ctxKey 上下文键类型（非导出，避免与外部键冲突）。

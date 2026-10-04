@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"baohaotong/internal/store"
-	"baohaotong/internal/tgcall"
+	"simkeeper/internal/store"
+	"simkeeper/internal/tgcall"
 )
 
 // Sender 根据用户配置把一条通知分发到全部启用渠道，并写入通知记录。

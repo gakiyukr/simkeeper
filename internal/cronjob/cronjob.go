@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"time"
 
-	"baohaotong/internal/auth"
-	"baohaotong/internal/db"
-	"baohaotong/internal/notify"
-	"baohaotong/internal/store"
+	"simkeeper/internal/auth"
+	"simkeeper/internal/db"
+	"simkeeper/internal/notify"
+	"simkeeper/internal/store"
 )
 
 // Jobs 聚合定时任务依赖。每次 New 出来的实例无状态，可安全并发触发

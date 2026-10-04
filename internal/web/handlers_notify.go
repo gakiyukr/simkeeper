@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"baohaotong/internal/store"
-	"baohaotong/internal/tgcall"
+	"simkeeper/internal/store"
+	"simkeeper/internal/tgcall"
 )
 
 // notifyConfigPublic 模板可安全展示的字段子集。

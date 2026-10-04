@@ -27,11 +27,11 @@ import (
 	"syscall"
 	"time"
 
-	"baohaotong/internal/cronjob"
-	"baohaotong/internal/db"
-	"baohaotong/internal/store"
-	"baohaotong/internal/tgcall"
-	"baohaotong/internal/web"
+	"simkeeper/internal/cronjob"
+	"simkeeper/internal/db"
+	"simkeeper/internal/store"
+	"simkeeper/internal/tgcall"
+	"simkeeper/internal/web"
 )
 
 func main() {

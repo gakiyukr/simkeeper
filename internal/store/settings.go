@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"time"
 
-	"baohaotong/internal/db"
+	"simkeeper/internal/db"
 )
 
 // SettingRepo 读写 system_settings 键值表。

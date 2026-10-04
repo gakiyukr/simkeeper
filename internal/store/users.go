@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"baohaotong/internal/auth"
-	"baohaotong/internal/db"
+	"simkeeper/internal/auth"
+	"simkeeper/internal/db"
 )
 
 // ErrNotFound 数据记录不存在时的统一错误。

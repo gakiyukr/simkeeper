@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"baohaotong/internal/auth"
+	"simkeeper/internal/auth"
 )
 
 // HandleSetup 初始化管理员。

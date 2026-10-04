@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"baohaotong/internal/auth"
-	"baohaotong/internal/store"
+	"simkeeper/internal/auth"
+	"simkeeper/internal/store"
 )
 
 // 用户名规则：中英文、数字、下划线、连字符，2-50 位（与 PHP 版一致）。

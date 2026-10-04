@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"baohaotong/internal/cronjob"
-	"baohaotong/internal/store"
+	"simkeeper/internal/cronjob"
+	"simkeeper/internal/store"
 )
 
 // AdminStats 管理端首页统计。
