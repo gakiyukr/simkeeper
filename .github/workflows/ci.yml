@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+
+      - name: gofmt check
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: build (CGO_ENABLED=0，与发布产物一致)
+        run: CGO_ENABLED=0 go build -trimpath -o simkeeper .
+
+      - name: test
+        run: go test ./...
+
+  deploy-docs:
+    # DEPLOY.md / deploy/ 里的示例至少保证存在且被引用，防止文档腐化
+    name: docs lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: referenced files exist
+        run: |
+          test -f DEPLOY.md
+          test -f deploy/simkeeper.service
+          test -f deploy/Caddyfile.example
+          grep -q "DEPLOY.md" README.md
+          grep -q "SK_SECURE_COOKIES" DEPLOY.md
+          grep -q "TZ=" deploy/simkeeper.service

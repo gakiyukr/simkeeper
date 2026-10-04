@@ -1,7 +1,9 @@
 package notify
 
 import (
+	"net/http"
 	"testing"
+	"time"
 )
 
 // 签名算法的参考向量由独立实现（Python hmac 标准库）按官方文档算法计算生成，
@@ -34,21 +36,22 @@ func TestDingTalkSign(t *testing.T) {
 }
 
 func TestChannelSenderNonNilClient(t *testing.T) {
-	// 未传 HTTPClient 时各发送器应自建默认客户端而不 panic；
-	// 用不可达地址快速走一遍错误路径。
-	err := SendFeishu(nil, FeishuConfig{Webhook: "http://127.0.0.1:1/nope"}, "x")
+	// 未传 HTTPClient 时各发送器自建默认客户端；这里传短超时客户端，
+	// 让「连真实域名但不可达」的用例快速失败，而不是等默认 15s 超时。
+	fast := &http.Client{Timeout: 500 * time.Millisecond}
+	err := SendFeishu(fast, FeishuConfig{Webhook: "http://127.0.0.1:1/nope"}, "x")
 	if err == nil {
 		t.Error("不可达 webhook 应返回错误")
 	}
-	err = SendDingTalk(nil, DingTalkConfig{Webhook: "http://127.0.0.1:1/nope"}, "x")
+	err = SendDingTalk(fast, DingTalkConfig{Webhook: "http://127.0.0.1:1/nope"}, "x")
 	if err == nil {
 		t.Error("不可达 webhook 应返回错误")
 	}
-	err = SendTelegram(nil, TelegramConfig{BotToken: "1:x", ChatID: "1"}, "x")
+	err = SendTelegram(fast, TelegramConfig{BotToken: "1:x", ChatID: "1"}, "x")
 	if err == nil {
 		t.Error("不可达 API 应返回错误")
 	}
-	err = SendWxPusher(nil, WxPusherConfig{AppToken: "x", UID: "y"}, "t", "x")
+	err = SendWxPusher(fast, WxPusherConfig{AppToken: "x", UID: "y"}, "t", "x")
 	if err == nil {
 		t.Error("不可达 API 应返回错误")
 	}
