@@ -2,9 +2,9 @@
 //
 // 单个静态二进制，内嵌模板与 schema，无需外部依赖：
 //
-//	./baohaotong                                    # SQLite：data/baohaotong.db，监听 127.0.0.1:8080
-//	./baohaotong -driver mysql  -dsn 'user:pass@tcp(127.0.0.1:3306)/baohaotong?charset=utf8mb4'
-//	./baohaotong -driver postgres -dsn 'postgres://user:pass@127.0.0.1:5432/baohaotong?TimeZone=Asia/Shanghai'
+//	./simkeeper                                    # SQLite：data/simkeeper.db，监听 127.0.0.1:8080
+//	./simkeeper -driver mysql  -dsn 'user:pass@tcp(127.0.0.1:3306)/simkeeper?charset=utf8mb4'
+//	./simkeeper -driver postgres -dsn 'postgres://user:pass@127.0.0.1:5432/simkeeper?TimeZone=Asia/Shanghai'
 //
 // 对应环境变量：SK_DRIVER / SK_DB / SK_DSN / SK_ADDR / SK_TRUST_PROXY / SK_CRON_INTERVAL。
 // 首次启动访问 /setup 创建管理员（创建后入口永久关闭）。
@@ -38,7 +38,7 @@ func main() {
 	log.SetFlags(log.LstdFlags)
 
 	// tg-login 子命令：为某个用户的 TG 电话渠道交互式登录 MTProto 账号。
-	// 用法：baohaotong tg-login -username <用户名> [-driver ... -db/-dsn ...]
+	// 用法：simkeeper tg-login -username <用户名> [-driver ... -db/-dsn ...]
 	if len(os.Args) > 1 && os.Args[1] == "tg-login" {
 		os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
 		tgLogin(os.Args)
@@ -48,12 +48,12 @@ func main() {
 	var (
 		driver = flag.String("driver", envOr("SK_DRIVER", db.DialectSQLite),
 			"数据库驱动：sqlite（默认）/ mysql / postgres")
-		dbPath = flag.String("db", envOr("SK_DB", "data/baohaotong.db"),
+		dbPath = flag.String("db", envOr("SK_DB", "data/simkeeper.db"),
 			"SQLite 数据库文件路径（仅 driver=sqlite 时使用）")
 		dsn = flag.String("dsn", envOr("SK_DSN", ""),
 			"MySQL/PostgreSQL 连接串，例如 "+
-				`mysql: 'user:pass@tcp(127.0.0.1:3306)/baohaotong?charset=utf8mb4'；`+
-				`postgres: 'postgres://user:pass@127.0.0.1:5432/baohaotong?TimeZone=Asia/Shanghai'`)
+				`mysql: 'user:pass@tcp(127.0.0.1:3306)/simkeeper?charset=utf8mb4'；`+
+				`postgres: 'postgres://user:pass@127.0.0.1:5432/simkeeper?TimeZone=Asia/Shanghai'`)
 		addr = flag.String("addr", envOr("SK_ADDR", "127.0.0.1:8080"),
 			"HTTP 监听地址")
 		trustProxy = flag.Bool("trust-proxy", envOr("SK_TRUST_PROXY", "") == "1",
@@ -142,13 +142,13 @@ func tgLogin(args []string) {
 	fs := flag.NewFlagSet("tg-login", flag.ExitOnError)
 	var (
 		driver = fs.String("driver", envOr("SK_DRIVER", db.DialectSQLite), "数据库驱动")
-		dbPath = fs.String("db", envOr("SK_DB", "data/baohaotong.db"), "SQLite 数据库路径")
+		dbPath = fs.String("db", envOr("SK_DB", "data/simkeeper.db"), "SQLite 数据库路径")
 		dsn    = fs.String("dsn", envOr("SK_DSN", ""), "MySQL/PostgreSQL 连接串")
 		user   = fs.String("username", "", "要登录哪个用户的 TG 电话渠道（登录页用的用户名）")
 	)
 	_ = fs.Parse(args)
 	if *user == "" {
-		fmt.Fprintln(os.Stderr, "用法: baohaotong tg-login -username <用户名>")
+		fmt.Fprintln(os.Stderr, "用法: simkeeper tg-login -username <用户名>")
 		os.Exit(2)
 	}
 

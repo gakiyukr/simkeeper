@@ -194,7 +194,7 @@ func (a *App) saveNotifyConfig(w http.ResponseWriter, r *http.Request, userID in
 		cfg.TGCallTarget == "" || cfg.TGCallSession == "") {
 		missing := "api_id、api_hash、被叫账号"
 		if cfg.TGCallSession == "" {
-			missing += "，且需先上传 tdata 或在服务器运行 baohaotong tg-login 完成登录"
+			missing += "，且需先上传 tdata 或在服务器运行 simkeeper tg-login 完成登录"
 		}
 		d.Flash, d.FlashIsErr = "启用 TG 电话渠道需填写 "+missing, true
 		a.render(w, http.StatusOK, "page_notify_config", *d)

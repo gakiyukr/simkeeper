@@ -60,7 +60,7 @@ func PlaceMissedCall(ctx context.Context, p Params, store *SessionStore) (newSes
 		return "", fmt.Errorf("TG 电话未配置 api_id/api_hash")
 	}
 	if p.Session == "" {
-		return "", fmt.Errorf("TG 账号尚未登录，请先运行: baohaotong tg-login")
+		return "", fmt.Errorf("TG 账号尚未登录，请先运行: simkeeper tg-login")
 	}
 	if p.Target == "" {
 		return "", fmt.Errorf("TG 电话未配置被叫账号")
