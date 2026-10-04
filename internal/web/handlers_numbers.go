@@ -194,16 +194,6 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		http.Error(w, "请求体解析失败", http.StatusBadRequest)
 		return
 	}
-	form := map[string]any{"Countries": Countries, "Carriers": Carriers}
-	if existing != nil {
-		form["N"] = existing
-		form["Country"] = existing.CountryCode
-	}
-	fail := func(msg string) {
-		d.Flash, d.FlashIsErr = msg, true
-		d.Content = form
-		a.render(w, http.StatusOK, "page_number_form", *d)
-	}
 
 	phone := normalizePhone(r.PostFormValue("phone_number"))
 	countryCode := strings.TrimSpace(r.PostFormValue("country_code"))
@@ -222,10 +212,29 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	if status != "inactive" {
 		status = "active"
 	}
-
 	autoEnabled := r.PostFormValue("auto_expiry_enabled") == "1"
 	autoStart := strings.TrimSpace(r.PostFormValue("auto_start_date"))
 	autoPeriod := atoiDefault(r.PostFormValue("auto_expiry_period"), 0)
+
+	// 校验失败回显用：以本次提交值构造实体——报错后表单不清空；
+	// 编辑模式下沿用原 ID（模板据 ID 区分编辑/新增）且回显用户改过的值而非库里旧值。
+	submitted := &store.PhoneNumber{
+		UserID: userID, PhoneNumber: phone, CountryCode: countryCode, CountryName: countryName,
+		Carrier: carrier, ExpiryDate: expiry,
+		RechargeAmount: amount, RechargeCurrency: currency,
+		RenewalDaysBefore: renewalDays, UsageDaysBefore: usageDays,
+		AutoExpiryEnabled: autoEnabled, AutoStartDate: autoStart,
+		AutoExpiryPeriod: autoPeriod, Status: status, Notes: notes,
+	}
+	if existing != nil {
+		submitted.ID = existing.ID
+	}
+	form := map[string]any{"Countries": Countries, "Carriers": Carriers, "N": submitted, "Country": countryCode}
+	fail := func(msg string) {
+		d.Flash, d.FlashIsErr = msg, true
+		d.Content = form
+		a.render(w, http.StatusOK, "page_number_form", *d)
+	}
 
 	var expiryDate time.Time
 	switch {

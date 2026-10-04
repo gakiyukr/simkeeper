@@ -2,12 +2,12 @@
 {{$N := .Content.N}}
 <div class="page-head">
   <div>
-    <h1 class="page-title">{{if $N}}编辑号码{{else}}添加号码{{end}}</h1>
-    <p class="page-desc">{{if $N}}{{$N.PhoneNumber}}{{else}}填写号码信息与提醒规则{{end}}</p>
+    <h1 class="page-title">{{if and $N $N.ID}}编辑号码{{else}}添加号码{{end}}</h1>
+    <p class="page-desc">{{if and $N $N.ID}}{{$N.PhoneNumber}}{{else}}填写号码信息与提醒规则{{end}}</p>
   </div>
 </div>
 
-<form method="post" action="{{if $N}}/numbers/{{$N.ID}}/edit{{else}}/numbers/new{{end}}">
+<form method="post" action="{{if and $N $N.ID}}/numbers/{{$N.ID}}/edit{{else}}/numbers/new{{end}}">
   <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
   <div class="card">
     <div class="card-header">
@@ -42,7 +42,7 @@
         <div class="field">
           <label class="label" for="n-expiry">到期日期</label>
           <input class="input" type="date" id="n-expiry" name="expiry_date" value="{{with $N}}{{.ExpiryDate}}{{end}}">
-          {{if $N}}<p class="hint">启用自动续期时以此字段为准重新计算</p>{{end}}
+          {{if and $N $N.ID}}<p class="hint">启用自动续期时以此字段为准重新计算</p>{{end}}
         </div>
         <div class="field">
           <label class="label" for="n-amount">建议充值金额</label>
@@ -106,7 +106,7 @@
         </div>
       </div>
 
-      {{if $N}}
+      {{if and $N $N.ID}}
       <div class="sec">
         <h3 class="sec-title">状态</h3>
         <p class="sec-sub">停用后不再纳入提醒</p>
@@ -123,7 +123,7 @@
     </div>
     <div class="card-footer">
       <a class="btn btn-ghost" href="/numbers">取消</a>
-      <button type="submit" class="btn">{{if $N}}保存修改{{else}}添加号码{{end}}</button>
+      <button type="submit" class="btn">{{if and $N $N.ID}}保存修改{{else}}添加号码{{end}}</button>
     </div>
   </div>
 </form>
