@@ -1,33 +1,41 @@
 {{define "page_notifications"}}{{template "head" .}}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">通知历史</h1>
+    <p class="page-desc">共 {{.Content.Total}} 条 · 发送提醒或测试通知后在这里留档</p>
+  </div>
+</div>
+
 <div class="card">
-  <div class="card-h">通知历史（共 {{.Content.Total}} 条）</div>
-  <div class="card-b">
+  <div class="card-content flush">
     {{if not .Content.Items}}
-    <p class="muted" style="text-align:center;margin:.5rem 0">暂无通知记录。发送提醒或测试通知后会在这里留档。</p>
+    <div class="empty">暂无通知记录</div>
     {{else}}
-    <table>
-      <thead><tr><th>时间</th><th>类型</th><th>渠道</th><th>号码</th><th>内容</th><th>状态</th></tr></thead>
-      <tbody>
-        {{range .Content.Items}}
-        <tr>
-          <td class="muted" style="white-space:nowrap">{{.CreatedAt}}</td>
-          <td>{{typeText .Type}}</td>
-          <td>{{channelText .Channel}}</td>
-          <td>{{if .PhoneNumber}}<code>{{.PhoneNumber}}</code>{{else}}<span class="muted">—</span>{{end}}</td>
-          <td class="muted">
-            <span title="{{.Message}}">{{snippet .Message}}</span>
-            {{if .ErrorMessage}}<br><small style="color:var(--err)" title="{{.ErrorMessage}}">失败原因：{{snippet .ErrorMessage}}</small>{{end}}
-          </td>
-          <td><span class="badge {{statusBadge .Status}}">{{statusTextN .Status}}</span></td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>时间</th><th>类型</th><th>渠道</th><th>号码</th><th>内容</th><th>状态</th></tr></thead>
+        <tbody>
+          {{range .Content.Items}}
+          <tr>
+            <td class="muted" style="white-space:nowrap">{{.CreatedAt}}</td>
+            <td>{{typeText .Type}}</td>
+            <td><span class="badge-sec">{{channelText .Channel}}</span></td>
+            <td>{{if .PhoneNumber}}<span class="mono-strong">{{.PhoneNumber}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
+            <td class="muted" style="min-width:14rem">
+              <span title="{{.Message}}">{{snippet .Message}}</span>
+              {{if .ErrorMessage}}<br><small class="err-text" title="{{.ErrorMessage}}">失败原因：{{snippet .ErrorMessage}}</small>{{end}}
+            </td>
+            <td><span class="badge {{statusBadge .Status}}">{{statusTextN .Status}}</span></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
     {{if gt .Content.Pages 1}}
     <div class="pager">
-      {{if gt .Content.Page 1}}<a href="/notifications?page={{sub .Content.Page 1}}">‹ 上一页</a>{{end}}
-      <span class="muted">第 {{.Content.Page}} / {{.Content.Pages}} 页</span>
-      {{if lt .Content.Page .Content.Pages}}<a href="/notifications?page={{add .Content.Page 1}}">下一页 ›</a>{{end}}
+      {{if gt .Content.Page 1}}<a class="btn btn-sm btn-outline" href="/notifications?page={{sub .Content.Page 1}}">‹ 上一页</a>{{end}}
+      <span>第 {{.Content.Page}} / {{.Content.Pages}} 页</span>
+      {{if lt .Content.Page .Content.Pages}}<a class="btn btn-sm btn-outline" href="/notifications?page={{add .Content.Page 1}}">下一页 ›</a>{{end}}
     </div>
     {{end}}
     {{end}}

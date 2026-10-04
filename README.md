@@ -2,7 +2,7 @@
 
 **eSIM / 手机号保号到期提醒系统（Go 版）。**
 
-SimKeeper 是 [保号通 baohaotong](https://github.com/jasonpan168/baohaotong)（PHP 版）的 Go 重写：**单个静态二进制**，内嵌模板与数据库 schema，支持 **SQLite / MySQL / PostgreSQL** 三种数据库（默认 SQLite，纯 Go 驱动无 CGO），进程内定时任务无需 crontab，不依赖任何外部 CDN 资源。
+SimKeeper 是 [保号通 baohaotong](https://github.com/jasonpan168/baohaotong)（PHP 版）的 Go 重写：**单个静态二进制**，内嵌模板与数据库 schema，支持 **SQLite / MySQL / PostgreSQL** 三种数据库（默认 SQLite，纯 Go 驱动无 CGO），进程内定时任务无需 crontab，不依赖任何外部 CDN 资源。前端为 shadcn/ui 风格的仪表盘界面（侧边栏布局、数据表、状态徽章、深色模式），全部由内嵌 CSS 实现，同样零外部依赖。
 
 ```
 go build -o simkeeper .

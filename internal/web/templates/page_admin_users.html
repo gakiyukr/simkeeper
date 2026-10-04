@@ -1,84 +1,90 @@
 {{define "page_admin_users"}}{{template "head" .}}
 {{$me := .User}}
-<div class="card">
-  <div class="card-h">
-    用户管理（共 {{.Content.Total}} 个）
-    <form method="get" action="/admin/users" class="inline" style="display:flex;gap:.4rem">
-      <input type="text" name="q" value="{{.Content.Search}}" placeholder="搜索用户名 / 邮箱" style="width:200px">
-      <button type="submit" class="btn btn-sm btn-ghost">搜索</button>
-    </form>
+<div class="page-head">
+  <div>
+    <h1 class="page-title">用户管理</h1>
+    <p class="page-desc">共 {{.Content.Total}} 个用户</p>
   </div>
-  <div class="card-b">
+  <form method="get" action="/admin/users" class="inline-form">
+    <input class="input" type="text" name="q" value="{{.Content.Search}}" placeholder="搜索用户名 / 邮箱" style="width:13rem">
+    <button type="submit" class="btn btn-outline">{{template "ico_search"}}搜索</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card-content flush">
     {{if not .Content.Users}}
-    <p class="muted" style="text-align:center;margin:.5rem 0">没有匹配的用户</p>
+    <div class="empty">没有匹配的用户</div>
     {{else}}
-    <table>
-      <thead><tr>
-        <th>ID</th><th>用户名</th><th>邮箱</th><th>角色</th><th>状态</th><th>注册时间</th><th style="text-align:right">操作</th>
-      </tr></thead>
-      <tbody>
-        {{range .Content.Users}}
-        <tr>
-          <td class="muted">{{.ID}}</td>
-          <td>{{.Username}}{{if eq .ID $me.ID}} <span class="badge badge-muted">当前账号</span>{{end}}</td>
-          <td>{{.Email}}</td>
-          <td>{{if eq .Role "admin"}}<span class="badge badge-ok">管理员</span>{{else}}<span class="muted">用户</span>{{end}}</td>
-          <td>{{if eq .Status "active"}}<span class="badge badge-ok">正常</span>{{else if eq .Status "banned"}}<span class="badge badge-danger">已封禁</span>{{else}}<span class="badge badge-muted">停用</span>{{end}}</td>
-          <td class="muted">{{.CreatedAt}}</td>
-          <td>
-            {{if ne .ID $me.ID}}
-            <div class="actions">
-              {{if eq .Status "banned"}}
-              <form method="post" action="/admin/users" class="inline">
-                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <input type="hidden" name="action" value="unban">
-                <input type="hidden" name="user_id" value="{{.ID}}">
-                <button type="submit" class="btn btn-sm btn-ghost">解禁</button>
-              </form>
-              {{else if ne .Status "inactive"}}
-              <form method="post" action="/admin/users" class="inline">
-                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <input type="hidden" name="action" value="ban">
-                <input type="hidden" name="user_id" value="{{.ID}}">
-                <button type="submit" class="btn btn-sm btn-ghost">封禁</button>
-              </form>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr>
+          <th>ID</th><th>用户名</th><th>邮箱</th><th>角色</th><th>状态</th><th>注册时间</th><th style="text-align:right">操作</th>
+        </tr></thead>
+        <tbody>
+          {{range .Content.Users}}
+          <tr>
+            <td class="muted">{{.ID}}</td>
+            <td>{{.Username}}{{if eq .ID $me.ID}} <span class="badge-sec">当前账号</span>{{end}}</td>
+            <td class="muted">{{.Email}}</td>
+            <td>{{if eq .Role "admin"}}<span class="badge badge-info">管理员</span>{{else}}<span class="badge-sec">用户</span>{{end}}</td>
+            <td>{{if eq .Status "active"}}<span class="badge badge-ok">正常</span>{{else if eq .Status "banned"}}<span class="badge badge-danger">已封禁</span>{{else}}<span class="badge badge-muted">停用</span>{{end}}</td>
+            <td class="muted" style="white-space:nowrap">{{.CreatedAt}}</td>
+            <td>
+              {{if ne .ID $me.ID}}
+              <div class="actions">
+                {{if eq .Status "banned"}}
+                <form method="post" action="/admin/users" class="inline">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="action" value="unban">
+                  <input type="hidden" name="user_id" value="{{.ID}}">
+                  <button type="submit" class="btn btn-sm btn-outline">解禁</button>
+                </form>
+                {{else if ne .Status "inactive"}}
+                <form method="post" action="/admin/users" class="inline">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="action" value="ban">
+                  <input type="hidden" name="user_id" value="{{.ID}}">
+                  <button type="submit" class="btn btn-sm btn-outline">封禁</button>
+                </form>
+                {{end}}
+                <form method="post" action="/admin/users" class="inline-form">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="action" value="role">
+                  <input type="hidden" name="user_id" value="{{.ID}}">
+                  <select name="role" class="select auto">
+                    <option value="user" {{if ne .Role "admin"}}selected{{end}}>用户</option>
+                    <option value="admin" {{if eq .Role "admin"}}selected{{end}}>管理员</option>
+                  </select>
+                  <button type="submit" class="btn btn-sm btn-outline">调整角色</button>
+                </form>
+                <form method="post" action="/admin/users" class="inline"
+                      onsubmit="return confirm('确定重置 {{.Username}} 的密码吗？将生成随机临时密码并踢掉其全部会话。')">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="action" value="resetpw">
+                  <input type="hidden" name="user_id" value="{{.ID}}">
+                  <button type="submit" class="btn btn-sm btn-outline">重置密码</button>
+                </form>
+                <form method="post" action="/admin/users" class="inline"
+                      onsubmit="return confirm('确定删除用户 {{.Username}} 吗？其号码与通知记录将一并删除。')">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="action" value="delete">
+                  <input type="hidden" name="user_id" value="{{.ID}}">
+                  <button type="submit" class="btn btn-sm btn-destructive">删除</button>
+                </form>
+              </div>
               {{end}}
-              <form method="post" action="/admin/users" class="inline" style="display:flex;gap:.3rem">
-                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <input type="hidden" name="action" value="role">
-                <input type="hidden" name="user_id" value="{{.ID}}">
-                <select name="role" style="width:auto;padding:.2rem .4rem">
-                  <option value="user" {{if ne .Role "admin"}}selected{{end}}>用户</option>
-                  <option value="admin" {{if eq .Role "admin"}}selected{{end}}>管理员</option>
-                </select>
-                <button type="submit" class="btn btn-sm btn-ghost">调整角色</button>
-              </form>
-              <form method="post" action="/admin/users" class="inline"
-                    onsubmit="return confirm('确定重置 {{.Username}} 的密码吗？将生成随机临时密码并踢掉其全部会话。')">
-                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <input type="hidden" name="action" value="resetpw">
-                <input type="hidden" name="user_id" value="{{.ID}}">
-                <button type="submit" class="btn btn-sm btn-ghost">重置密码</button>
-              </form>
-              <form method="post" action="/admin/users" class="inline"
-                    onsubmit="return confirm('确定删除用户 {{.Username}} 吗？其号码与通知记录将一并删除。')">
-                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <input type="hidden" name="action" value="delete">
-                <input type="hidden" name="user_id" value="{{.ID}}">
-                <button type="submit" class="btn btn-sm btn-danger">删除</button>
-              </form>
-            </div>
-            {{end}}
-          </td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
     {{if gt .Content.Pages 1}}
     <div class="pager">
-      {{if gt .Content.Page 1}}<a href="/admin/users?page={{sub .Content.Page 1}}&q={{.Content.Search}}">‹ 上一页</a>{{end}}
-      <span class="muted">第 {{.Content.Page}} / {{.Content.Pages}} 页</span>
-      {{if lt .Content.Page .Content.Pages}}<a href="/admin/users?page={{add .Content.Page 1}}&q={{.Content.Search}}">下一页 ›</a>{{end}}
+      {{if gt .Content.Page 1}}<a class="btn btn-sm btn-outline" href="/admin/users?page={{sub .Content.Page 1}}&q={{.Content.Search}}">‹ 上一页</a>{{end}}
+      <span>第 {{.Content.Page}} / {{.Content.Pages}} 页</span>
+      {{if lt .Content.Page .Content.Pages}}<a class="btn btn-sm btn-outline" href="/admin/users?page={{add .Content.Page 1}}&q={{.Content.Search}}">下一页 ›</a>{{end}}
     </div>
     {{end}}
     {{end}}

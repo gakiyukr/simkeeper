@@ -1,58 +1,67 @@
 {{define "page_dashboard"}}{{template "head" .}}
-<div class="grid">
-  <div class="stat"><div class="num">{{.Content.Total}}</div><div class="muted">在管号码</div></div>
-  <div class="stat warn"><div class="num">{{.Content.Expiring7}}</div><div class="muted">7 天内到期</div></div>
-  <div class="stat ok"><div class="num">{{.Content.ActiveCnt}}</div><div class="muted">使用中</div></div>
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-label">在管号码</div><div class="stat-num">{{.Content.Total}}</div></div>
+  <div class="stat-card"><div class="stat-label">7 天内到期</div><div class="stat-num warn">{{.Content.Expiring7}}</div></div>
+  <div class="stat-card"><div class="stat-label">使用中</div><div class="stat-num ok">{{.Content.ActiveCnt}}</div></div>
 </div>
 
 <div class="card">
-  <div class="card-h">我的号码 <a class="btn btn-sm" href="/numbers/new">＋ 添加号码</a></div>
-  <div class="card-b">
+  <div class="card-header row">
+    <div><h2 class="card-title">我的号码</h2></div>
+    <a class="btn btn-sm" href="/numbers/new">{{template "ico_plus"}}添加号码</a>
+  </div>
+  <div class="card-content flush">
     {{if not .Content.Numbers}}
-    <p class="muted" style="text-align:center;margin:.5rem 0">
-      还没有添加任何号码。先去<a href="/numbers/new">添加一个</a>，
-      再到<a href="/notifications/config">通知配置</a>里启用提醒渠道。
-    </p>
+    <div class="empty">还没有添加任何号码。先去<a class="link" href="/numbers/new">添加一个</a>，再到<a class="link" href="/notifications/config">通知配置</a>里启用提醒渠道。</div>
     {{else}}
-    <table>
-      <thead><tr><th>号码</th><th>国家 / 运营商</th><th>到期日</th><th>剩余</th><th class="muted">提醒窗口</th><th style="text-align:right">操作</th></tr></thead>
-      <tbody>
-        {{range .Content.Numbers}}
-        <tr>
-          <td><code>{{.PhoneNumber}}</code></td>
-          <td>{{.CountryName}}<br><small class="muted">{{.Carrier}}</small></td>
-          <td>{{.ExpiryDate}}</td>
-          <td><span class="badge {{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span></td>
-          <td class="muted"><small>续费 {{.RenewalDaysBefore}} 天 · 使用 {{.UsageDaysBefore}} 天</small></td>
-          <td><div class="actions"><a class="btn btn-sm btn-ghost" href="/numbers/{{.ID}}/edit">编辑</a></div></td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>号码</th><th>国家 / 运营商</th><th>到期日</th><th>剩余</th><th class="muted">提醒窗口</th><th style="text-align:right">操作</th></tr></thead>
+        <tbody>
+          {{range .Content.Numbers}}
+          <tr>
+            <td class="mono-strong">{{.PhoneNumber}}</td>
+            <td>{{.CountryName}}<br><small class="muted">{{.Carrier}}</small></td>
+            <td>{{.ExpiryDate}}</td>
+            <td><span class="badge {{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span></td>
+            <td class="muted"><small>续费 {{.RenewalDaysBefore}} 天 · 使用 {{.UsageDaysBefore}} 天</small></td>
+            <td style="text-align:right"><a class="btn btn-sm btn-outline" href="/numbers/{{.ID}}/edit">编辑</a></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
     {{end}}
+  </div>
+  <div class="card-footer" style="justify-content:flex-end">
+    <a href="/notifications" class="muted" style="font-size:.8125rem">查看全部通知 →</a>
   </div>
 </div>
 
 <div class="card">
-  <div class="card-h">最近通知 <a href="/notifications" class="muted" style="font-size:.85rem;font-weight:400">全部历史 →</a></div>
-  <div class="card-b">
+  <div class="card-header row">
+    <div><h2 class="card-title">最近通知</h2></div>
+  </div>
+  <div class="card-content flush">
     {{if not .Content.RecentNotifs}}
-    <p class="muted" style="text-align:center;margin:.5rem 0">暂无通知记录</p>
+    <div class="empty">暂无通知记录</div>
     {{else}}
-    <table>
-      <thead><tr><th>时间</th><th>类型</th><th>渠道</th><th>内容</th><th>状态</th></tr></thead>
-      <tbody>
-        {{range .Content.RecentNotifs}}
-        <tr>
-          <td class="muted">{{.CreatedAt}}</td>
-          <td>{{typeText .Type}}</td>
-          <td>{{channelText .Channel}}</td>
-          <td class="muted"><span title="{{.Message}}">{{snippet .Message}}</span></td>
-          <td><span class="badge {{statusBadge .Status}}">{{statusTextN .Status}}</span></td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>时间</th><th>类型</th><th>渠道</th><th>内容</th><th>状态</th></tr></thead>
+        <tbody>
+          {{range .Content.RecentNotifs}}
+          <tr>
+            <td class="muted" style="white-space:nowrap">{{.CreatedAt}}</td>
+            <td>{{typeText .Type}}</td>
+            <td><span class="badge-sec">{{channelText .Channel}}</span></td>
+            <td class="muted"><span title="{{.Message}}">{{snippet .Message}}</span></td>
+            <td><span class="badge {{statusBadge .Status}}">{{statusTextN .Status}}</span></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
     {{end}}
   </div>
 </div>

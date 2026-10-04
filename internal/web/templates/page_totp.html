@@ -1,17 +1,19 @@
-{{define "page_totp"}}{{template "head" .}}
-<div class="card" style="max-width:420px;margin:2rem auto">
-  <div class="card-h">两步验证</div>
-  <div class="card-b">
-    <p class="muted">请输入验证器应用中的 6 位验证码。</p>
+{{define "page_totp"}}{{template "authhead" .}}
+<div class="card">
+  <div class="card-header">
+    <h1 class="card-title">两步验证</h1>
+    <p class="card-desc">输入验证器应用中的 6 位验证码</p>
+  </div>
+  <div class="card-content">
     <form method="post" action="/login/totp">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <div class="field">
-        <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code"
+      <div class="field" style="margin-bottom:1.25rem">
+        <input class="input" type="text" name="code" inputmode="numeric" autocomplete="one-time-code"
                pattern="[0-9]{6}" maxlength="6" required autofocus
-               style="text-align:center;font-size:1.4rem;letter-spacing:.4em">
+               style="text-align:center;font-size:1.35rem;letter-spacing:.5em;height:3rem">
       </div>
       <button type="submit" class="btn" style="width:100%">验证并登录</button>
     </form>
   </div>
 </div>
-{{template "foot" .}}{{end}}
+{{template "authfoot" .}}{{end}}

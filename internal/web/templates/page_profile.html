@@ -1,91 +1,103 @@
 {{define "page_profile"}}{{template "head" .}}
 {{$T := .Content.TOTP}}
-<div class="card" style="max-width:560px">
-  <div class="card-h">两步验证（TOTP）</div>
-  <div class="card-b">
+<div class="page-head">
+  <div>
+    <h1 class="page-title">个人设置</h1>
+    <p class="page-desc">账号信息、安全选项</p>
+  </div>
+</div>
+
+<div class="card" style="max-width:40rem">
+  <div class="card-header">
+    <h2 class="card-title">{{template "ico_key"}} 两步验证（TOTP）</h2>
+  </div>
+  <div class="card-content">
     {{if $T.Enabled}}
-    <p>当前状态：<span class="badge badge-ok">已启用</span>——登录时需要输入验证器验证码。</p>
+    <p style="margin:0 0 1rem">当前状态：<span class="badge badge-ok">已启用</span> —— 登录时需要输入验证器验证码。</p>
     <form method="post" action="/profile">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <input type="hidden" name="totp_disable" value="1">
-      <div class="field">
-        <label>输入验证器当前验证码以关闭两步验证</label>
-        <input type="text" name="totp_code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required>
+      <div class="field" style="margin-bottom:1rem">
+        <label class="label" for="tp-off">输入验证器当前验证码以关闭两步验证</label>
+        <input class="input" type="text" id="tp-off" name="totp_code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required style="max-width:12rem">
       </div>
-      <button type="submit" class="btn btn-danger">关闭两步验证</button>
+      <button type="submit" class="btn btn-destructive">关闭两步验证</button>
     </form>
     {{else if $T.Secret}}
-    <p>请用验证器应用（Google Authenticator、Aegis 等）扫码，或手动输入密钥，然后输入 6 位验证码确认启用。</p>
-    {{if $T.QR}}<p style="text-align:center"><img src="{{$T.QR}}" alt="TOTP QR" width="220" height="220"></p>{{end}}
-    <p>密钥（手动输入用）：<code>{{$T.Secret}}</code></p>
-    <p class="muted" style="font-size:.85rem">验证器链接：{{$T.URI}}</p>
+    <p style="margin:0 0 1rem">请用验证器应用（Google Authenticator、Aegis 等）扫码，或手动输入密钥，然后输入 6 位验证码确认启用。</p>
+    {{if $T.QR}}<p style="text-align:center;margin:0 0 1rem"><img src="{{$T.QR}}" alt="TOTP QR" width="220" height="220" style="border-radius:.5rem"></p>{{end}}
+    <div class="kv"><span class="k">密钥</span><code>{{$T.Secret}}</code></div>
+    <div class="kv"><span class="k">验证器链接</span><span class="muted" style="word-break:break-all;font-size:.8125rem">{{$T.URI}}</span></div>
     <form method="post" action="/profile">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <input type="hidden" name="totp_enable" value="1">
-      <div class="field">
-        <label>验证器当前验证码</label>
-        <input type="text" name="totp_code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required>
+      <div class="field" style="margin:1rem 0">
+        <label class="label" for="tp-on">验证器当前验证码</label>
+        <input class="input" type="text" id="tp-on" name="totp_code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required style="max-width:12rem">
       </div>
       <button type="submit" class="btn">确认启用</button>
     </form>
     {{else}}
-    <p>当前状态：<span class="badge badge-muted">未启用</span></p>
-    <p class="muted">启用后，登录除了密码还需要验证器应用的 6 位验证码。</p>
+    <p style="margin:0 0 .5rem">当前状态：<span class="badge badge-muted">未启用</span></p>
+    <p class="hint" style="margin:0 0 1rem">启用后，登录除了密码还需要验证器应用的 6 位验证码。</p>
     <form method="post" action="/profile">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <input type="hidden" name="totp_setup" value="1">
       <button type="submit" class="btn">开始启用两步验证</button>
     </form>
     {{end}}
-    <p class="muted" style="font-size:.85rem;margin-bottom:0">
+    <p class="hint" style="margin:1.25rem 0 0">
       验证器丢失时，需要服务器管理员在数据库中清除 totp 字段才能恢复登录，请妥善保管验证器。
     </p>
   </div>
 </div>
 
-<div class="card" style="max-width:560px">
-  <div class="card-h">账号信息</div>
-  <div class="card-b">
-    <p><span class="muted">用户名：</span>{{.User.Username}}</p>
-    <p><span class="muted">当前邮箱：</span>{{.Content.Email}}</p>
+<div class="card" style="max-width:40rem">
+  <div class="card-header"><h2 class="card-title">{{template "ico_users"}} 账号信息</h2></div>
+  <div class="card-content">
+    <div class="kv"><span class="k">用户名</span><span>{{.User.Username}}</span></div>
+    <div class="kv"><span class="k">当前邮箱</span><span>{{.Content.Email}}</span></div>
   </div>
 </div>
 
-<div class="card" style="max-width:560px">
-  <div class="card-h">修改邮箱</div>
-  <div class="card-b">
+<div class="card" style="max-width:40rem">
+  <div class="card-header"><h2 class="card-title">{{template "ico_mail"}} 修改邮箱</h2></div>
+  <div class="card-content">
     <form method="post" action="/profile">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <input type="hidden" name="change_email" value="1">
-      <div class="field">
-        <label>新邮箱</label>
-        <input type="email" name="email" value="{{.Content.Email}}" required>
+      <div class="field" style="margin-bottom:1rem">
+        <label class="label" for="pf-email">新邮箱</label>
+        <input class="input" type="email" id="pf-email" name="email" value="{{.Content.Email}}" required>
       </div>
-      <button type="submit" class="btn">保存邮箱</button>
+      <button type="submit" class="btn btn-outline">保存邮箱</button>
     </form>
   </div>
 </div>
 
-<div class="card" style="max-width:560px">
-  <div class="card-h">修改密码</div>
-  <div class="card-b">
-    <p class="muted">修改成功后所有设备将被强制退出，需重新登录。</p>
+<div class="card" style="max-width:40rem">
+  <div class="card-header"><h2 class="card-title">{{template "ico_key"}} 修改密码</h2></div>
+  <div class="card-content">
+    <p class="hint" style="margin:0 0 1rem">修改成功后所有设备将被强制退出，需重新登录。</p>
     <form method="post" action="/profile">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <input type="hidden" name="change_password" value="1">
-      <div class="field">
-        <label>当前密码</label>
-        <input type="password" name="current_password" required>
+      <div class="form-grid">
+        <div class="field span2">
+          <label class="label" for="pf-cur">当前密码</label>
+          <input class="input" type="password" id="pf-cur" name="current_password" required>
+        </div>
+        <div class="field">
+          <label class="label" for="pf-new">新密码</label>
+          <input class="input" type="password" id="pf-new" name="new_password" required>
+          <p class="hint">至少 8 位</p>
+        </div>
+        <div class="field">
+          <label class="label" for="pf-confirm">确认新密码</label>
+          <input class="input" type="password" id="pf-confirm" name="confirm_password" required>
+        </div>
       </div>
-      <div class="field">
-        <label>新密码（至少 8 位）</label>
-        <input type="password" name="new_password" required>
-      </div>
-      <div class="field">
-        <label>确认新密码</label>
-        <input type="password" name="confirm_password" required>
-      </div>
-      <button type="submit" class="btn">更新密码</button>
+      <button type="submit" class="btn" style="margin-top:1.25rem">更新密码</button>
     </form>
   </div>
 </div>

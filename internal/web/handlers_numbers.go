@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"simkeeper/internal/store"
 )
@@ -492,6 +493,13 @@ var funcMap = template.FuncMap{
 			return "待发送"
 		}
 		return s
+	},
+	// firstRune 取用户名首字符（按 rune），用作侧边栏头像字母。
+	"firstRune": func(s string) string {
+		for _, r := range strings.TrimSpace(s) {
+			return string(unicode.ToUpper(r))
+		}
+		return "?"
 	},
 	"maskSecret": func(s string) string {
 		if len(s) <= 4 {

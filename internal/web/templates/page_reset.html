@@ -1,20 +1,24 @@
-{{define "page_reset"}}{{template "head" .}}
-<div class="card" style="max-width:460px;margin:2rem auto">
-  <div class="card-h">设置新密码</div>
-  <div class="card-b">
+{{define "page_reset"}}{{template "authhead" .}}
+<div class="card auth-wide">
+  <div class="card-header">
+    <h1 class="card-title">设置新密码</h1>
+    <p class="card-desc">重置成功后请用新密码重新登录，全部旧会话将被强制退出。</p>
+  </div>
+  <div class="card-content">
     <form method="post" action="/reset">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <input type="hidden" name="token" value="{{.Content.Token}}">
-      <div class="field">
-        <label>新密码（至少 8 位）</label>
-        <input type="password" name="new_password" required autofocus>
+      <div class="field" style="margin-bottom:1rem">
+        <label class="label" for="rs-password">新密码</label>
+        <input class="input" type="password" id="rs-password" name="new_password" required autofocus>
+        <p class="hint">至少 8 位</p>
       </div>
-      <div class="field">
-        <label>确认新密码</label>
-        <input type="password" name="confirm_password" required>
+      <div class="field" style="margin-bottom:1.25rem">
+        <label class="label" for="rs-confirm">确认新密码</label>
+        <input class="input" type="password" id="rs-confirm" name="confirm_password" required>
       </div>
       <button type="submit" class="btn" style="width:100%">重置密码</button>
     </form>
   </div>
 </div>
-{{template "foot" .}}{{end}}
+{{template "authfoot" .}}{{end}}

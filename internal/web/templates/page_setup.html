@@ -1,30 +1,31 @@
-{{define "page_setup"}}{{template "head" .}}
-<div class="auth-wrap">
-  <div class="card">
-    <div class="card-h">初始化 · 创建管理员</div>
-    <div class="card-b">
-      <p class="muted">系统还没有任何账号。这是唯一一次创建管理员的机会：设置完成后本页面将永久关闭。</p>
-      <form method="post" action="/setup">
-        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <div class="field">
-          <label>管理员用户名</label>
-          <input type="text" name="username" required autofocus>
-        </div>
-        <div class="field">
-          <label>邮箱</label>
-          <input type="email" name="email" required>
-        </div>
-        <div class="field">
-          <label>密码（至少 8 位）</label>
-          <input type="password" name="password" required>
-        </div>
-        <div class="field">
-          <label>确认密码</label>
-          <input type="password" name="confirm_password" required>
-        </div>
-        <button type="submit" class="btn" style="width:100%">创建管理员并进入登录页</button>
-      </form>
-    </div>
+{{define "page_setup"}}{{template "authhead" .}}
+<div class="card auth-wide">
+  <div class="card-header">
+    <h1 class="card-title">初始化 · 创建管理员</h1>
+    <p class="card-desc">系统还没有任何账号。这是唯一一次创建管理员的机会：设置完成后本页面将永久关闭。</p>
+  </div>
+  <div class="card-content">
+    <form method="post" action="/setup">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="field" style="margin-bottom:1rem">
+        <label class="label" for="s-username">管理员用户名</label>
+        <input class="input" type="text" id="s-username" name="username" required autofocus>
+      </div>
+      <div class="field" style="margin-bottom:1rem">
+        <label class="label" for="s-email">邮箱</label>
+        <input class="input" type="email" id="s-email" name="email" required>
+      </div>
+      <div class="field" style="margin-bottom:1rem">
+        <label class="label" for="s-password">密码</label>
+        <input class="input" type="password" id="s-password" name="password" required>
+        <p class="hint">至少 8 位</p>
+      </div>
+      <div class="field" style="margin-bottom:1.25rem">
+        <label class="label" for="s-confirm">确认密码</label>
+        <input class="input" type="password" id="s-confirm" name="confirm_password" required>
+      </div>
+      <button type="submit" class="btn" style="width:100%">创建管理员并进入登录页</button>
+    </form>
   </div>
 </div>
-{{template "foot" .}}{{end}}
+{{template "authfoot" .}}{{end}}

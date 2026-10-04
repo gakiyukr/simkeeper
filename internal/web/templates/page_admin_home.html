@@ -1,53 +1,58 @@
 {{define "page_admin_home"}}{{template "head" .}}
-<div class="grid">
-  <div class="stat ok"><div class="num">{{.Content.ActiveUsers}}</div><div class="muted">活跃用户</div></div>
-  <div class="stat"><div class="num">{{.Content.AdminCount}}</div><div class="muted">管理员</div></div>
-  <div class="stat"><div class="num">{{.Content.Numbers}}</div><div class="muted">活跃号码</div></div>
-  <div class="stat warn"><div class="num">{{.Content.Expiring7}}</div><div class="muted">7 天内到期</div></div>
-  <div class="stat ok"><div class="num">{{.Content.SentTotal}}</div><div class="muted">累计发送</div></div>
-  <div class="stat {{if gt .Content.FailedTotal 0}}err{{end}}"><div class="num">{{.Content.FailedTotal}}</div><div class="muted">累计失败</div></div>
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-label">活跃用户</div><div class="stat-num ok">{{.Content.ActiveUsers}}</div></div>
+  <div class="stat-card"><div class="stat-label">管理员</div><div class="stat-num">{{.Content.AdminCount}}</div></div>
+  <div class="stat-card"><div class="stat-label">活跃号码</div><div class="stat-num">{{.Content.Numbers}}</div></div>
+  <div class="stat-card"><div class="stat-label">7 天内到期</div><div class="stat-num warn">{{.Content.Expiring7}}</div></div>
+  <div class="stat-card"><div class="stat-label">累计发送</div><div class="stat-num ok">{{.Content.SentTotal}}</div></div>
+  <div class="stat-card"><div class="stat-label">累计失败</div><div class="stat-num {{if gt .Content.FailedTotal 0}}err{{end}}">{{.Content.FailedTotal}}</div></div>
 </div>
 
 <div class="card">
-  <div class="card-h">定时任务</div>
-  <div class="card-b">
-    <p>
-      <span class="muted">最后执行：</span>
-      {{if .Content.LastCronRun}}{{.Content.LastCronRun}}{{else}}<span class="muted">尚未执行</span>{{end}}
-    </p>
+  <div class="card-header row">
+    <div>
+      <h2 class="card-title">{{template "ico_refresh"}} 定时任务</h2>
+      <p class="card-desc">进程内置调度器按配置的间隔自动执行（自动续期滚动 → 到期提醒 → 数据清理），无需外部 crontab</p>
+    </div>
     <form method="post" action="/admin/cron">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <button type="submit" class="btn btn-sm">立即执行一轮</button>
+      <button type="submit" class="btn btn-outline btn-sm">立即执行一轮</button>
     </form>
-    <p class="muted" style="font-size:.85rem;margin-bottom:0">
-      进程内置调度器按配置的间隔自动执行（自动续期滚动 → 到期提醒 → 数据清理），
-      无需外部 crontab。
-    </p>
+  </div>
+  <div class="card-content">
+    <div class="kv"><span class="k">最后执行</span>
+      <span>{{if .Content.LastCronRun}}{{.Content.LastCronRun}}{{else}}<span class="muted">尚未执行</span>{{end}}</span>
+    </div>
   </div>
 </div>
 
 <div class="card">
-  <div class="card-h">最近通知 <a href="/admin/numbers" class="muted" style="font-size:.85rem;font-weight:400">全部号码 →</a></div>
-  <div class="card-b">
+  <div class="card-header row">
+    <div><h2 class="card-title">最近通知</h2></div>
+    <a href="/admin/numbers" class="muted" style="font-size:.8125rem">全部号码 →</a>
+  </div>
+  <div class="card-content flush">
     {{if not .Content.RecentNotifs}}
-    <p class="muted" style="text-align:center;margin:.5rem 0">暂无通知记录</p>
+    <div class="empty">暂无通知记录</div>
     {{else}}
-    <table>
-      <thead><tr><th>时间</th><th>用户</th><th>号码</th><th>类型</th><th>渠道</th><th>内容</th><th>状态</th></tr></thead>
-      <tbody>
-        {{range .Content.RecentNotifs}}
-        <tr>
-          <td class="muted" style="white-space:nowrap">{{.CreatedAt}}</td>
-          <td>{{.Username}}</td>
-          <td>{{if .PhoneNumber}}<code>{{.PhoneNumber}}</code>{{else}}—{{end}}</td>
-          <td>{{typeText .Type}}</td>
-          <td>{{channelText .Channel}}</td>
-          <td class="muted"><span title="{{.Message}}">{{snippet .Message}}</span></td>
-          <td><span class="badge {{statusBadge .Status}}">{{statusTextN .Status}}</span></td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>时间</th><th>用户</th><th>号码</th><th>类型</th><th>渠道</th><th>内容</th><th>状态</th></tr></thead>
+        <tbody>
+          {{range .Content.RecentNotifs}}
+          <tr>
+            <td class="muted" style="white-space:nowrap">{{.CreatedAt}}</td>
+            <td>{{.Username}}</td>
+            <td>{{if .PhoneNumber}}<span class="mono-strong">{{.PhoneNumber}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
+            <td>{{typeText .Type}}</td>
+            <td><span class="badge-sec">{{channelText .Channel}}</span></td>
+            <td class="muted"><span title="{{.Message}}">{{snippet .Message}}</span></td>
+            <td><span class="badge {{statusBadge .Status}}">{{statusTextN .Status}}</span></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
     {{end}}
   </div>
 </div>
