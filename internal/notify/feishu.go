@@ -64,8 +64,8 @@ func SendFeishu(client *http.Client, cfg FeishuConfig, message string) error {
 	}
 	defer resp.Body.Close()
 	var fr feishuResponse
-	if err := json.NewDecoder(resp.Body).Decode(&fr); err != nil {
-		return fmt.Errorf("飞书返回内容无法解析: %w", err)
+	if err := decodeJSONBody(resp, &fr, "飞书"); err != nil {
+		return err
 	}
 	switch {
 	case fr.Code != 0:

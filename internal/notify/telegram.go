@@ -40,8 +40,8 @@ func SendTelegram(client *http.Client, cfg TelegramConfig, message string) error
 	}
 	defer resp.Body.Close()
 	var tr telegramResponse
-	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
-		return fmt.Errorf("Telegram 返回内容无法解析: %w", err)
+	if err := decodeJSONBody(resp, &tr, "Telegram"); err != nil {
+		return err
 	}
 	if !tr.OK {
 		return fmt.Errorf("Telegram 发送失败: %s", tr.Description)

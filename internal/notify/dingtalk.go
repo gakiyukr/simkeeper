@@ -72,8 +72,8 @@ func SendDingTalk(client *http.Client, cfg DingTalkConfig, message string) error
 	}
 	defer resp.Body.Close()
 	var dr dingTalkResponse
-	if err := json.NewDecoder(resp.Body).Decode(&dr); err != nil {
-		return fmt.Errorf("钉钉返回内容无法解析: %w", err)
+	if err := decodeJSONBody(resp, &dr, "钉钉"); err != nil {
+		return err
 	}
 	if dr.ErrCode != 0 {
 		return fmt.Errorf("钉钉发送失败: errcode=%d %s", dr.ErrCode, dr.ErrMsg)

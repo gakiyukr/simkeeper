@@ -2,6 +2,8 @@ package notify
 
 import (
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -54,5 +56,33 @@ func TestChannelSenderNonNilClient(t *testing.T) {
 	err = SendWxPusher(fast, WxPusherConfig{AppToken: "x", UID: "y"}, "t", "x")
 	if err == nil {
 		t.Error("不可达 API 应返回错误")
+	}
+}
+
+
+// TestDecodeJSONBodyRejectsNon2xx 回归：HTTP 状态码非 2xx 时必须报错，
+// 即使响应体看起来能解码——网关错误页缺失业务字段，零值解码会被
+// 误判为发送成功（失败告警与重投随之失效）。
+func TestDecodeJSONBodyRejectsNon2xx(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"message":"gateway error"}`))
+	}))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var payload struct {
+		Code int `json:"code"`
+	}
+	err = decodeJSONBody(resp, &payload, "飞书")
+	if err == nil {
+		t.Fatal("HTTP 502 应返回错误，即使响应体能解码")
+	}
+	if !strings.Contains(err.Error(), "502") {
+		t.Fatalf("错误信息应包含状态码, got %v", err)
 	}
 }

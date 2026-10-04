@@ -41,8 +41,8 @@ func SendWxPusher(client *http.Client, cfg WxPusherConfig, subject, message stri
 	}
 	defer resp.Body.Close()
 	var wr wxpusherResponse
-	if err := json.NewDecoder(resp.Body).Decode(&wr); err != nil {
-		return fmt.Errorf("WxPusher 返回内容无法解析: %w", err)
+	if err := decodeJSONBody(resp, &wr, "WxPusher"); err != nil {
+		return err
 	}
 	if !wr.Success {
 		return fmt.Errorf("WxPusher 发送失败: %s", wr.Msg)

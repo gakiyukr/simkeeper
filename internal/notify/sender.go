@@ -3,7 +3,9 @@ package notify
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -36,6 +38,27 @@ func SubjectFor(typ string) string {
 		return "📱 eSIM续费提醒"
 	}
 	return "📞 eSIM使用提醒"
+}
+
+// decodeJSONBody 读取并解析渠道 JSON 响应。
+// HTTP 状态码非 2xx 时直接报错（附响应片段）——网关错误页、限流页等
+// 响应体可能缺失业务字段，零值解码会被误判为发送成功。
+func decodeJSONBody(resp *http.Response, v any, channel string) error {
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return fmt.Errorf("%s读取响应失败: %w", channel, err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		snippet := string(raw)
+		if len(snippet) > 200 {
+			snippet = snippet[:200]
+		}
+		return fmt.Errorf("%s服务返回 HTTP %d: %s", channel, resp.StatusCode, snippet)
+	}
+	if err := json.Unmarshal(raw, v); err != nil {
+		return fmt.Errorf("%s返回内容无法解析: %w", channel, err)
+	}
+	return nil
 }
 
 // SendToEnabledChannels 向用户已启用的全部渠道发送通知。
