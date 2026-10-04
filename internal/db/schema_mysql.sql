@@ -1,4 +1,4 @@
--- 保号通 数据库结构（MySQL 8.0+ / MariaDB 10.5+）。
+-- SimKeeper 数据库结构（MySQL 8.0+ / MariaDB 10.5+）。
 -- 与 SQLite 版的字段与约束一致，仅类型与 DDL 语法按 MySQL 方言：
 --  - 时间列用 DATETIME；应用按 parseTime=false 连接，驱动以 "YYYY-MM-DD HH:MM:SS"
 --    字符串返回，与 Go 侧解析约定一致。

@@ -171,16 +171,16 @@ func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
 // message 已含换行，经 escapeHTML 后把 \n 转 <br>，语义同 PHP 版 nl2br(htmlspecialchars(...))。
 func FormatEmailBody(message string) string {
 	var b strings.Builder
-	b.WriteString(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>保号通通知</title><style>
+	b.WriteString(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SimKeeper 通知</title><style>
 body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
 .container { max-width: 600px; margin: 0 auto; padding: 20px; }
 .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
 .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
 .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
 .message { background: white; padding: 15px; border-radius: 5px; border-left: 4px solid #667eea; }
-</style></head><body><div class="container"><div class="header"><h2>📱 保号通通知</h2></div><div class="content"><div class="message">`)
+</style></head><body><div class="container"><div class="header"><h2>📱 SimKeeper 通知</h2></div><div class="content"><div class="message">`)
 	b.WriteString(NL2BR(html.EscapeString(message)))
-	b.WriteString(`</div></div><div class="footer"><p>此邮件由保号通系统自动发送，请勿回复。</p></div></div></body></html>`)
+	b.WriteString(`</div></div><div class="footer"><p>此邮件由 SimKeeper 系统自动发送，请勿回复。</p></div></div></body></html>`)
 	return b.String()
 }
 

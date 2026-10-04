@@ -1,4 +1,4 @@
-// 保号通 Go 版入口。
+// SimKeeper Go 版入口。
 //
 // 单个静态二进制，内嵌模板与 schema，无需外部依赖：
 //
@@ -111,7 +111,7 @@ func run(driver, dbPath, dsn, addr string, trustProxy bool, cronInterval time.Du
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
-		log.Printf("[main] 保号通已启动（驱动 %s）: http://%s", driver, addr)
+		log.Printf("[main] SimKeeper已启动（驱动 %s）: http://%s", driver, addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("[main] HTTP 服务异常退出: %v", err)
 		}

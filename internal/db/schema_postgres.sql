@@ -1,4 +1,4 @@
--- 保号通 数据库结构（PostgreSQL 12+）。
+-- SimKeeper 数据库结构（PostgreSQL 12+）。
 -- 与 SQLite 版的字段与约束一致，仅类型与 DDL 语法按 PostgreSQL 方言：
 --  - 主键用 BIGSERIAL，与另两种方言一样从 1 起自增；插入取 ID 走 RETURNING id
 --    （见 db.InsertID，PostgreSQL 不支持 LastInsertId）。

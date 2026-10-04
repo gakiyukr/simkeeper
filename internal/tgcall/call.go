@@ -136,7 +136,7 @@ func resolveUser(ctx context.Context, api *tg.Client, target string) (*tg.User, 
 	imported, err := api.ContactsImportContacts(ctx, []tg.InputPhoneContact{{
 		ClientID:  1,
 		Phone:     phone,
-		FirstName: "保号通",
+		FirstName: "SimKeeper",
 	}})
 	if err != nil {
 		return nil, err

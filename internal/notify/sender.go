@@ -151,7 +151,7 @@ func (s *Sender) placeMissedCall(userID int64, cfg *store.NotifyConfig) error {
 // preview 可选，附加一段内容预览；返回给前端的错误信息已做成可直接展示的文案。
 func (s *Sender) SendTest(userID int64, preview string) Result {
 	var b strings.Builder
-	b.WriteString("🧪 保号通测试通知\n\n")
+	b.WriteString("🧪 SimKeeper测试通知\n\n")
 	b.WriteString("这是一条测试消息，说明通知渠道配置可用。\n")
 	if preview != "" {
 		b.WriteString("\n内容预览：\n" + preview + "\n")

@@ -199,7 +199,7 @@ type pageData struct {
 func (a *App) baseData(r *http.Request, title string) pageData {
 	siteName, _ := a.Settings.Get("site_name")
 	if siteName == "" {
-		siteName = "保号通"
+		siteName = "SimKeeper"
 	}
 	d := pageData{
 		SiteName:  siteName,

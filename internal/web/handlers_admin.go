@@ -226,7 +226,7 @@ func (a *App) HandleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		retention := atoiDefault(r.PostFormValue("log_retention_days"), 90)
 		allowReg := r.PostFormValue("allow_registration") == "1"
 		if siteName == "" {
-			siteName = "保号通"
+			siteName = "SimKeeper"
 		}
 		if maxNumbers < 1 {
 			maxNumbers = 50
@@ -252,7 +252,7 @@ func (a *App) HandleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := AdminSettingsPage{
-		SiteName:      getStr(a, "site_name", "保号通"),
+		SiteName:      getStr(a, "site_name", "SimKeeper"),
 		MaxNumbers:    a.Settings.GetInt("max_numbers_per_user", 50),
 		RetentionDays: a.Settings.GetInt("log_retention_days", 90),
 		AllowReg:      a.Settings.GetInt("allow_registration", 1) == 1,

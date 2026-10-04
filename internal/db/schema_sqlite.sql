@@ -1,4 +1,4 @@
--- 保号通 数据库结构（SQLite）。
+-- SimKeeper 数据库结构（SQLite）。
 -- 与 PHP 版的差异：删除了从未被业务逻辑使用的死字段
 -- （renewal_reminder_days / usage_reminder_days / last_usage_date），
 -- 实际生效的提醒提前量是 renewal_days_before / usage_days_before。

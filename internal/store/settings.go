@@ -18,7 +18,7 @@ type SettingRepo struct {
 var DefaultSettings = []struct {
 	Key, Value, Description string
 }{
-	{"site_name", "保号通", "站点名称"},
+	{"site_name", "SimKeeper", "站点名称"},
 	{"site_description", "eSIM / 手机号保号到期提醒系统", "站点描述"},
 	{"max_numbers_per_user", "50", "每个用户最多可添加的号码数"},
 	{"log_retention_days", "90", "通知记录保留天数"},
