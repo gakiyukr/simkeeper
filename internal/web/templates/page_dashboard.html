@@ -1,95 +1,93 @@
 {{define "page_dashboard"}}{{template "head" .}}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">号码管理</h1>
+    <p class="page-desc">共 {{.Content.TotalAll}} 个号码 · 到期前按各号码的提醒窗口推送通知</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-outline" href="/numbers/export">{{template "ico_download"}}导出 CSV</a>
+    <a class="btn" href="/numbers/new">{{template "ico_plus"}}添加号码</a>
+  </div>
+</div>
+
 <div class="stat-grid">
-  <div class="stat-card"><div class="stat-label">在管号码</div><div class="stat-num">{{.Content.Total}}</div></div>
+  <div class="stat-card"><div class="stat-label">在管号码</div><div class="stat-num">{{.Content.TotalAll}}</div></div>
   <div class="stat-card"><div class="stat-label">7 天内到期</div><div class="stat-num warn">{{.Content.Expiring7}}</div></div>
   <div class="stat-card"><div class="stat-label">使用中</div><div class="stat-num ok">{{.Content.ActiveCnt}}</div></div>
 </div>
 
 <div class="card">
-  <div class="card-header row">
-    <div><h2 class="card-title">号码总览</h2></div>
-    <a class="btn btn-outline btn-sm" href="/numbers">{{template "ico_phone"}}管理号码</a>
+  <div class="cat-chips">
+    <a class="chip {{if eq .Content.Cat ""}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort ""}}">全部 <b>{{.Content.TotalAll}}</b></a>
+    <a class="chip {{if eq .Content.Cat "cycle"}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort "cycle"}}">需要周期性保号 <b>{{.Content.Counts.Cycle}}</b></a>
+    <a class="chip {{if eq .Content.Cat "none"}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort "none"}}">无需保号 <b>{{.Content.Counts.None}}</b></a>
+    <a class="chip {{if eq .Content.Cat "expired"}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort "expired"}}">已过期 <b>{{.Content.Counts.Expired}}</b></a>
+    <a class="chip {{if eq .Content.Cat "inactive"}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort "inactive"}}">已停用 <b>{{.Content.Counts.Inactive}}</b></a>
   </div>
-  <div class="dtabs">
-    <input type="radio" name="dashnum" id="dt-keep" checked>
-    <input type="radio" name="dashnum" id="dt-none">
-    <input type="radio" name="dashnum" id="dt-expired">
-    <div class="dtab-list">
-      <label for="dt-keep">需要周期性保号 <b>{{.Content.Counts.Cycle}}</b></label>
-      <label for="dt-none">无需保号 <b>{{.Content.Counts.None}}</b></label>
-      <label for="dt-expired">已过期 <b>{{.Content.Counts.Expired}}</b></label>
+  <form method="get" action="/" class="toolbar">
+    {{if .Content.Cat}}<input type="hidden" name="cat" value="{{.Content.Cat}}">{{end}}
+    <input class="input" type="text" name="q" value="{{.Content.Search}}" placeholder="搜索号码 / 国家 / 运营商 / 备注">
+    <select class="select auto" name="sort">
+      <option value="expiry_asc" {{if ne .Content.Sort "expiry_desc"}}{{if ne .Content.Sort "created_desc"}}selected{{end}}{{end}}>到期日 ↑</option>
+      <option value="expiry_desc" {{if eq .Content.Sort "expiry_desc"}}selected{{end}}>到期日 ↓</option>
+      <option value="created_desc" {{if eq .Content.Sort "created_desc"}}selected{{end}}>最新添加</option>
+    </select>
+    <button type="submit" class="btn btn-outline btn-sm">{{template "ico_search"}}筛选</button>
+  </form>
+  <div class="card-content flush">
+    {{if not .Content.Numbers}}
+    <div class="empty">{{if or .Content.Search .Content.Cat}}没有匹配的号码{{else}}还没有号码，点击右上角添加。{{end}}</div>
+    {{else}}
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr>
+          <th>号码</th><th>国家 / 运营商</th><th>下次续费</th><th>剩余</th><th>状态</th>
+          <th>续费周期</th><th style="text-align:right">操作</th>
+        </tr></thead>
+        <tbody>
+          {{range .Content.Numbers}}
+          <tr>
+            <td><span class="mono-strong phone-val">{{.PhoneNumber}}</span></td>
+            <td>{{.CountryName}}{{if .Carrier}}<br><small class="muted">{{.Carrier}}</small>{{end}}</td>
+            <td>
+              {{if .NoKeepalive}}<span class="muted">—</span>{{else}}{{.ExpiryDate}}{{if gt (cycleProgress .) -1}}
+              <div class="progress" title="当前周期进度 {{cycleProgress .}}%"><i class="{{fillClass (daysLeft .)}}" style="width:{{cycleProgress .}}%"></i></div>
+              {{end}}{{end}}
+            </td>
+            <td>{{if .NoKeepalive}}<span class="badge-sec">无需保号</span>{{else}}<span class="badge {{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span>{{end}}</td>
+            <td>{{if ne .Status "inactive"}}<span class="badge badge-ok">使用中</span>{{else}}<span class="badge badge-muted">已停用</span>{{end}}</td>
+            <td>{{if gt .AutoExpiryPeriod 0}}<span class="badge-sec">{{.AutoExpiryPeriod}} 天周期</span>{{else}}<span class="muted">—</span>{{end}}</td>
+            <td>
+              <div class="actions">
+                {{if gt .AutoExpiryPeriod 0}}
+                <form method="post" action="/numbers/{{.ID}}/renew" class="inline"
+                      onsubmit="return confirm('确定已续费吗？{{if lt (daysLeft .) 0}}号码已过期，将从今天起顺延 {{.AutoExpiryPeriod}} 天（复活）。{{else}}到期日将顺延 {{.AutoExpiryPeriod}} 天。{{end}}')">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <button type="submit" class="btn btn-sm btn-outline" title="续费完成：到期日顺延一个周期">已续费</button>
+                </form>
+                {{end}}
+                <a class="btn btn-sm btn-outline" href="/numbers/{{.ID}}/edit">编辑</a>
+                <form method="post" action="/numbers/{{.ID}}/delete" class="inline"
+                      onsubmit="return confirm('确定删除号码 {{.PhoneNumber}} 吗？此操作不可恢复。')">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <button type="submit" class="btn btn-sm btn-destructive">删除</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
     </div>
-    <div class="dpanels">
-      <section class="dpanel dp-keep">
-        {{if not .Content.Upcoming}}
-        <div class="empty">还没有添加任何号码。先去<a class="link" href="/numbers/new">添加一个</a>，再到<a class="link" href="/notifications/config">通知配置</a>里启用提醒渠道。</div>
-        {{else}}
-        <div class="tbl-wrap">
-          <table class="tbl">
-            <thead><tr><th>号码</th><th>国家 / 运营商</th><th>下次续费</th><th>剩余</th></tr></thead>
-            <tbody>
-              {{range .Content.Upcoming}}
-              <tr>
-                <td><span class="mono-strong phone-val">{{.PhoneNumber}}</span></td>
-                <td>{{.CountryName}}{{if .Carrier}}<span class="muted"> · {{.Carrier}}</span>{{end}}</td>
-                <td>{{.ExpiryDate}}</td>
-                <td><span class="badge {{daysBadge (daysLeft .)}}">{{daysLeft .}} 天</span></td>
-              </tr>
-              {{end}}
-            </tbody>
-          </table>
-        </div>
-        {{end}}
-      </section>
-      <section class="dpanel dp-none">
-        {{if not .Content.NoneList}}
-        <div class="empty">没有无需保号的号码。在添加或编辑号码时选择「无需保号」即可归入这里。</div>
-        {{else}}
-        <div class="tbl-wrap">
-          <table class="tbl">
-            <thead><tr><th>号码</th><th>国家 / 运营商</th><th>状态</th></tr></thead>
-            <tbody>
-              {{range .Content.NoneList}}
-              <tr>
-                <td><span class="mono-strong phone-val">{{.PhoneNumber}}</span></td>
-                <td>{{.CountryName}}{{if .Carrier}}<span class="muted"> · {{.Carrier}}</span>{{end}}</td>
-                <td>{{if ne .Status "inactive"}}<span class="badge-sec">使用中</span>{{else}}<span class="badge badge-muted">已停用</span>{{end}}</td>
-              </tr>
-              {{end}}
-            </tbody>
-          </table>
-        </div>
-        {{end}}
-      </section>
-      <section class="dpanel dp-expired">
-        {{if not .Content.ExpiredList}}
-        <div class="empty">没有已过期的号码，保持得很好。</div>
-        {{else}}
-        <div class="tbl-wrap">
-          <table class="tbl">
-            <thead><tr><th>号码</th><th>国家 / 运营商</th><th>过期于</th></tr></thead>
-            <tbody>
-              {{range .Content.ExpiredList}}
-              <tr>
-                <td><span class="mono-strong phone-val">{{.PhoneNumber}}</span></td>
-                <td>{{.CountryName}}{{if .Carrier}}<span class="muted"> · {{.Carrier}}</span>{{end}}</td>
-                <td>{{.ExpiryDate}}</td>
-              </tr>
-              {{end}}
-            </tbody>
-          </table>
-        </div>
-        {{end}}
-      </section>
+    {{if gt .Content.Pages 1}}
+    <div class="pager">
+      {{if gt .Content.Page 1}}<a class="btn btn-sm btn-outline" href="/?page={{sub .Content.Page 1}}{{if .Content.Search}}&q={{.Content.Search}}{{end}}{{if .Content.Cat}}&cat={{.Content.Cat}}{{end}}{{if .Content.Sort}}&sort={{.Content.Sort}}{{end}}">‹ 上一页</a>{{end}}
+      <span>第 {{.Content.Page}} / {{.Content.Pages}} 页</span>
+      {{if lt .Content.Page .Content.Pages}}<a class="btn btn-sm btn-outline" href="/?page={{add .Content.Page 1}}{{if .Content.Search}}&q={{.Content.Search}}{{end}}{{if .Content.Cat}}&cat={{.Content.Cat}}{{end}}{{if .Content.Sort}}&sort={{.Content.Sort}}{{end}}">下一页 ›</a>{{end}}
     </div>
+    {{end}}
+    {{end}}
   </div>
-  {{if or (gt .Content.More 0) (gt .Content.NoneMore 0) (gt .Content.ExpiredMore 0)}}
-  <div class="card-footer" style="justify-content:flex-end">
-    {{if gt .Content.More 0}}<a href="/numbers?cat=cycle" class="muted" style="font-size:.8125rem">还有 {{.Content.More}} 个周期保号码 →</a>{{end}}
-    {{if gt .Content.NoneMore 0}}<a href="/numbers?cat=none" class="muted" style="font-size:.8125rem;margin-left:.75rem">还有 {{.Content.NoneMore}} 个无需保号 →</a>{{end}}
-    {{if gt .Content.ExpiredMore 0}}<a href="/numbers?cat=expired" class="muted" style="font-size:.8125rem;margin-left:.75rem">还有 {{.Content.ExpiredMore}} 个已过期 →</a>{{end}}
-  </div>
-  {{end}}
 </div>
 
 <div class="card">

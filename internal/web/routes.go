@@ -29,7 +29,7 @@ func (a *App) Routes() http.Handler {
 
 	// ---- 用户侧 ----
 	mux.Handle("GET /", a.requireLogin(a.HandleDashboard))
-	mux.Handle("GET /numbers", a.requireLogin(a.HandleNumbers))
+	mux.Handle("GET /numbers", http.HandlerFunc(a.HandleNumbers)) // 已并入首页，永久重定向
 	mux.Handle("GET /numbers/new", a.requireLogin(a.HandleNumberNew))
 	mux.Handle("POST /numbers/new", a.requireLogin(a.csrfProtect(a.HandleNumberNew)))
 	mux.Handle("GET /numbers/export", a.requireLogin(a.HandleHistoryExport))

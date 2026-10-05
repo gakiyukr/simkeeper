@@ -91,91 +91,79 @@ func normalizePhone(raw string) string {
 	return s
 }
 
-// DashPage 首页仪表盘数据：三类号码标签页 + 统计 + 最近通知。
+// DashPage 首页数据：统计 + 完整号码管理（分类/搜索/排序/分页）+ 最近通知。
 type DashPage struct {
-	Upcoming    []store.PhoneNumber // 需要周期性保号：活跃号码按到期日升序前 N 个
-	More        int                 // 未展示的周期保号号码数
-	NoneList    []store.PhoneNumber // 无需保号列表（最新添加在前）
-	NoneMore    int
-	ExpiredList []store.PhoneNumber // 已过期列表（最近过期在前）
-	ExpiredMore int
-	Counts      CategoryCounts
-	Total       int
-	Expiring7   int // 7 天内到期（含今天）
-	ActiveCnt   int
-	SiteDesc    string
+	Numbers      []store.PhoneNumber // 当前分类+搜索+排序+分页后的号码
+	Total        int                 // 过滤后的号码数（分页用）
+	TotalAll     int                 // 全部号码数（页头展示）
+	Page         int
+	Pages        int
+	Search       string
+	Cat          string
+	Sort         string
+	Counts       CategoryCounts
+	Expiring7    int // 7 天内到期（含今天）
+	ActiveCnt    int
 	RecentNotifs []store.Notification
 }
 
-// dashUpcomingLimit 概览页每个号码标签页的最大条数；完整管理在号码管理页。
-const dashUpcomingLimit = 5
 
-// HandleDashboard 首页：概览 + 即将到期摘要。
+// HandleDashboard 首页 = 号码管理主页：统计 + 完整号码管理 + 最近通知。
+// 号码是本程序的核心功能，独立的管理页已并入首页（/numbers 重定向到 /）。
 func (a *App) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 	u := a.currentUser(r)
-	d := a.baseData(r, "概览")
+	d := a.baseData(r, "号码管理")
 	d.ActiveNav = ""
 
-	numbers, _, err := a.Numbers.ListForUser(u.ID, 1, 500)
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	cat := r.URL.Query().Get("cat")
+	sortKey := r.URL.Query().Get("sort")
+	all, _, err := a.Numbers.ListForUser(u.ID, 1, 1000000)
 	if err != nil {
 		http.Error(w, "内部错误", http.StatusInternalServerError)
 		return
 	}
 	today := time.Now()
-	page := DashPage{Total: len(numbers), Counts: categoryCounts(numbers, today)}
-	keepAll := make([]store.PhoneNumber, 0, len(numbers))
-	for i := range numbers {
-		n := numbers[i]
-		switch {
-		case n.NoKeepalive:
-			page.NoneList = append(page.NoneList, n)
-			continue
-		case n.DaysLeft(today) < 0:
-			page.ExpiredList = append(page.ExpiredList, n)
+	counts := categoryCounts(all, today)
+	expiring7, activeCnt := 0, 0
+	for i := range all {
+		if all[i].NoKeepalive {
 			continue
 		}
-		if n.DaysLeft(today) <= 7 {
-			page.Expiring7++
+		days := all[i].DaysLeft(today)
+		if days >= 0 && days <= 7 {
+			expiring7++
 		}
-		if n.Status == "active" {
-			page.ActiveCnt++
-			keepAll = append(keepAll, n)
+		if all[i].Status == "active" {
+			activeCnt++
 		}
 	}
-	// YYYY-MM-DD 文本可直接字典序排序
-	sort.Slice(keepAll, func(i, j int) bool { return keepAll[i].ExpiryDate < keepAll[j].ExpiryDate })
-	if len(keepAll) > dashUpcomingLimit {
-		page.More = len(keepAll) - dashUpcomingLimit
-		keepAll = keepAll[:dashUpcomingLimit]
+	filtered := filterSortNumbers(all, q, cat, sortKey)
+	total := len(filtered)
+	pageNum := atoiDefault(r.URL.Query().Get("page"), 1)
+	pages := (total + 19) / 20
+	if pages < 1 {
+		pages = 1
 	}
-	page.Upcoming = keepAll
-	// 无需保号：最新添加在前；已过期：最近过期在前
-	sort.Slice(page.NoneList, func(i, j int) bool { return page.NoneList[i].ID > page.NoneList[j].ID })
-	sort.Slice(page.ExpiredList, func(i, j int) bool { return page.ExpiredList[i].ExpiryDate > page.ExpiredList[j].ExpiryDate })
-	if len(page.NoneList) > dashUpcomingLimit {
-		page.NoneMore = len(page.NoneList) - dashUpcomingLimit
-		page.NoneList = page.NoneList[:dashUpcomingLimit]
+	if pageNum < 1 {
+		pageNum = 1
 	}
-	if len(page.ExpiredList) > dashUpcomingLimit {
-		page.ExpiredMore = len(page.ExpiredList) - dashUpcomingLimit
-		page.ExpiredList = page.ExpiredList[:dashUpcomingLimit]
+	if pageNum > pages {
+		pageNum = pages
 	}
-	page.SiteDesc, _ = a.Settings.Get("site_description")
-	page.RecentNotifs, _, _ = a.Notify.ListForUser(u.ID, 1, 5)
-	d.Content = page
+	start := (pageNum - 1) * 20
+	end := start + 20
+	if end > total {
+		end = total
+	}
+	recent, _, _ := a.Notify.ListForUser(u.ID, 1, 5)
+	d.Content = DashPage{
+		Numbers: filtered[start:end], Total: total, TotalAll: len(all),
+		Page: pageNum, Pages: pages, Search: q, Cat: cat, Sort: sortKey,
+		Counts: counts, Expiring7: expiring7, ActiveCnt: activeCnt,
+		RecentNotifs: recent,
+	}
 	a.render(w, http.StatusOK, "page_dashboard", d)
-}
-
-// NumbersPage 号码列表页数据。
-type NumbersPage struct {
-	Numbers []store.PhoneNumber
-	Total   int
-	Page    int
-	Pages   int
-	Search  string
-	Cat     string
-	Sort    string
-	Counts  CategoryCounts
 }
 
 // CategoryCounts 号码三类保号分类 + 已停用的数量（互斥，合计 = 总数）。
@@ -204,43 +192,9 @@ func categoryCounts(nums []store.PhoneNumber, now time.Time) CategoryCounts {
 	return c
 }
 
-// HandleNumbers 号码管理列表：关键词/状态过滤 + 排序 + 分页。
-// 号码量受每用户配额约束（默认 50，上限万级），取全量后内存过滤分页，
-// 免去三方言的动态 SQL 分支；排序键见 filterSortNumbers。
+// HandleNumbers 旧号码管理页已并入首页，永久重定向。
 func (a *App) HandleNumbers(w http.ResponseWriter, r *http.Request) {
-	u := a.currentUser(r)
-	d := a.baseData(r, "号码管理")
-	d.ActiveNav = "numbers"
-
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	cat := r.URL.Query().Get("cat")
-	sortKey := r.URL.Query().Get("sort")
-	all, _, err := a.Numbers.ListForUser(u.ID, 1, 1000000)
-	if err != nil {
-		http.Error(w, "内部错误", http.StatusInternalServerError)
-		return
-	}
-	counts := categoryCounts(all, time.Now())
-	filtered := filterSortNumbers(all, q, cat, sortKey)
-	total := len(filtered)
-	pageNum := atoiDefault(r.URL.Query().Get("page"), 1)
-	pages := (total + 19) / 20
-	if pages < 1 {
-		pages = 1
-	}
-	if pageNum < 1 {
-		pageNum = 1
-	}
-	if pageNum > pages {
-		pageNum = pages
-	}
-	start := (pageNum - 1) * 20
-	end := start + 20
-	if end > total {
-		end = total
-	}
-	d.Content = NumbersPage{Numbers: filtered[start:end], Total: total, Page: pageNum, Pages: pages, Search: q, Cat: cat, Sort: sortKey, Counts: counts}
-	a.render(w, http.StatusOK, "page_numbers", d)
+	http.Redirect(w, r, "/", http.StatusMovedPermanently)
 }
 
 // filterSortNumbers 纯函数：关键词匹配号码/国家/运营商/备注（不区分大小写），
@@ -570,8 +524,10 @@ func (a *App) HandleNotificationHistory(w http.ResponseWriter, r *http.Request) 
 func daysBadge(days int) string {
 	switch {
 	case days < 0:
-		return "badge-danger"
+		return "badge-danger badge-blink" // 已过期：红色闪烁提示
 	case days <= 3:
+		return "badge-danger"
+	case days <= 7:
 		return "badge-warning"
 	default:
 		return "badge-ok"
@@ -718,12 +674,12 @@ var funcMap = template.FuncMap{
 		}
 		return pct
 	},
-	// fillClass 进度条填充色：与剩余天数徽章同色系。
+	// fillClass 进度条填充色：与剩余天数徽章同色系（>7 绿 / 4-7 黄 / <=3 红）。
 	"fillClass": func(days int) string {
 		switch {
-		case days < 0:
-			return "fill-err"
 		case days <= 3:
+			return "fill-err"
+		case days <= 7:
 			return "fill-warn"
 		}
 		return "fill-ok"

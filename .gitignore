@@ -15,3 +15,8 @@
 sk_tmp.exe
 sk_tmp.exe~
 sk_*/
+secret.key
+dev.db
+dev.db-wal
+dev.db-shm
+dev.log

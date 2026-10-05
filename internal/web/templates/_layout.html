@@ -21,8 +21,7 @@
     <nav class="side-nav">
       <span class="side-label">平台</span>
       {{if .User}}
-      <a href="/" class="side-item {{if eq .ActiveNav ""}}active{{end}}">{{template "ico_dash"}}概览</a>
-      <a href="/numbers" class="side-item {{if hasPrefix .ActiveNav "numbers"}}active{{end}}">{{template "ico_phone"}}号码管理</a>
+      <a href="/" class="side-item {{if eq .ActiveNav ""}}active{{end}}">{{template "ico_phone"}}号码管理</a>
       <a href="/notifications" class="side-item {{if eq .ActiveNav "notifications"}}active{{end}}">{{template "ico_history"}}通知历史</a>
       <a href="/notifications/config" class="side-item {{if eq .ActiveNav "notify"}}active{{end}}">{{template "ico_settings"}}通知配置</a>
       {{if eq .User.Role "admin"}}
@@ -373,19 +372,10 @@ pre.msg{background:var(--muted);border-radius:calc(var(--radius) - 2px);padding:
 .mode-item input:checked+.mode-card{border-color:var(--foreground);background:var(--accent)}
 .mode-item input:focus-visible+.mode-card{box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 25%,transparent)}
 @media(max-width:720px){.mode-row{grid-template-columns:1fr}}
-/* 概览三类号码标签页（纯 CSS 单选切换） */
-.dtabs input{position:absolute;opacity:0;pointer-events:none}
-.dtab-list{display:flex;gap:.25rem;padding:.6rem 1rem 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
-.dtab-list label{padding:.35rem .7rem;font-size:.8125rem;cursor:pointer;color:var(--muted-foreground);border-bottom:2px solid transparent;white-space:nowrap}
-.dtab-list label b{font-weight:600}
-.dtab-list label:hover{color:var(--foreground)}
-.dpanel{display:none}
-#dt-keep:checked~.dtab-list label[for=dt-keep],
-#dt-none:checked~.dtab-list label[for=dt-none],
-#dt-expired:checked~.dtab-list label[for=dt-expired]{color:var(--foreground);border-bottom-color:var(--foreground);font-weight:500}
-#dt-keep:checked~.dpanels .dp-keep,
-#dt-none:checked~.dpanels .dp-none,
-#dt-expired:checked~.dpanels .dp-expired{display:block}
+/* 已过期剩余徽章：红色闪烁 */
+@keyframes badge-blink{0%,100%{opacity:1}50%{opacity:.3}}
+.badge-blink{animation:badge-blink 1.1s ease-in-out infinite}
+@media(prefers-reduced-motion:reduce){.badge-blink{animation:none}}
 /* 分类 chips 行 */
 .cat-chips{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;padding:.75rem 1rem;border-bottom:1px solid var(--border)}
 .cat-chips .chip b{font-weight:600;margin-left:.15rem}
