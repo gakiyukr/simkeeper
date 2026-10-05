@@ -95,9 +95,9 @@
         <div id="keep-fields">
           <div class="form-grid">
             <div class="field">
-              <label class="label" for="n-autostart">开始日期</label>
-              <input class="input" type="date" id="n-autostart" name="auto_start_date" value="{{with $N}}{{.AutoStartDate}}{{end}}" required>
-              <p class="hint">本周期从这一天开始</p>
+              <label class="label" for="n-expiry">下次续费日期</label>
+              <input class="input" type="date" id="n-expiry" name="expiry_date" value="{{with $N}}{{.ExpiryDate}}{{end}}" required>
+              <p class="hint">本周期到这一天截止（即到期日）；8.1 续费、三个月一续，就填 11.1</p>
             </div>
             <div class="field">
               <label class="label" for="n-autoperiod">续费周期（天，1-3650）</label>
@@ -189,7 +189,7 @@ const SK_COUNTRIES = {{countryJSON .Content.Countries}};
 })();
 
 (function () {
-  const start = document.getElementById('n-autostart'),
+  const expiry = document.getElementById('n-expiry'),
         period = document.getElementById('n-autoperiod'),
         out = document.getElementById('expiry-preview');
   const fmtCN = function (iso) {
@@ -215,14 +215,15 @@ const SK_COUNTRIES = {{countryJSON .Content.Countries}};
       return;
     }
     const n = parseInt(period.value, 10);
-    if (!start.value || !n || n < 1) {
-      out.textContent = '到期日 = 开始日期 + 周期；到期后点「已续费」顺延一个周期';
+    if (!expiry.value || !n || n < 1) {
+      out.textContent = '例如：8 月 1 日续费、三个月一续，下次续费日期填 11 月 1 日、周期 90 天';
       return;
     }
-    const d = new Date(start.value + 'T00:00:00');
-    d.setDate(d.getDate() + n);
-    const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-    out.textContent = '开始：' + fmtCN(start.value) + ' → 到期：' + fmtCN(iso) + '（每 ' + n + ' 天，到期后点「已续费」顺延）';
+    const d0 = new Date(expiry.value + 'T00:00:00');
+    const s = new Date(d0);
+    s.setDate(s.getDate() - n);
+    const isoS = s.getFullYear() + '-' + String(s.getMonth() + 1).padStart(2, '0') + '-' + String(s.getDate()).padStart(2, '0');
+    out.textContent = '下次续费：' + fmtCN(expiry.value) + '（本周期开始：' + fmtCN(isoS) + '）· 每 ' + n + ' 天，续费后顺延一个周期';
   }
   document.querySelectorAll('#period-chips .chip').forEach(function (c) {
     c.addEventListener('click', function () { period.value = c.dataset.days; markChips(); preview(); });
@@ -230,7 +231,7 @@ const SK_COUNTRIES = {{countryJSON .Content.Countries}};
   document.querySelectorAll('input[name="keepalive_mode"]').forEach(function (r) {
     r.addEventListener('change', refresh);
   });
-  [start, period].forEach(function (el) {
+  [expiry, period].forEach(function (el) {
     el.addEventListener('change', function () { markChips(); preview(); });
     el.addEventListener('input', function () { markChips(); preview(); });
   });

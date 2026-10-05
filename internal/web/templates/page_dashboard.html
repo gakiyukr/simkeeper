@@ -8,8 +8,8 @@
 <div class="card">
   <div class="card-header row">
     <div>
-      <h2 class="card-title">即将到期</h2>
-      <p class="card-desc">活跃号码按到期日排序{{if gt .Content.More 0}}（仅显示最早的前 {{len .Content.Upcoming}} 个）{{end}}</p>
+      <h2 class="card-title">即将续费</h2>
+      <p class="card-desc">活跃号码按下次续费日期排序{{if gt .Content.More 0}}（仅显示最早的前 {{len .Content.Upcoming}} 个）{{end}}</p>
     </div>
     <a class="btn btn-outline btn-sm" href="/numbers">{{template "ico_phone"}}管理号码</a>
   </div>

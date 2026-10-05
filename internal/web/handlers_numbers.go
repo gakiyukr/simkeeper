@@ -349,15 +349,16 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		status = "active"
 	}
 	// 保号方式二选一：keep 需要周期性保号 / none 无需保号。
-	// 需要保号的号码一律以「开始日期 + 周期」定义（保号本身就是循环操作，
-	// 没有非周期的例外）；到期日始终由此计算，滚动只在用户点「已续费」时发生。
+	// 需要保号的号码以「下次续费日期 + 周期」定义（保号本身就是循环操作）：
+	// 下次续费日期即到期日；周期起点（auto_start_date）由 到期日-周期 推导存储，
+	// 滚动只在用户点「已续费」时发生。
 	mode := r.PostFormValue("keepalive_mode")
 	noKeepalive := mode == "none"
-	autoStart := strings.TrimSpace(r.PostFormValue("auto_start_date"))
 	autoPeriod := atoiDefault(r.PostFormValue("auto_expiry_period"), 0)
+	autoStart := ""
 	if noKeepalive {
-		// 无需保号：清空周期字段；到期日不录入
-		autoStart, autoPeriod = "", 0
+		// 无需保号：清空周期字段，不录入到期日
+		expiry, autoPeriod = "", 0
 	}
 	autoEnabled := !noKeepalive
 
@@ -396,22 +397,22 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		// 无需保号：不录入到期日，不参与任何提醒与滚动
 		expiry = ""
 	} else {
-		// 需要周期性保号：到期日 = 开始日期 + 周期
-		if autoStart == "" {
-			fail("需要周期性保号的号码需填写开始日期")
+		// 需要周期性保号：下次续费日期即到期日；周期起点 = 到期日 - 周期
+		if expiry == "" {
+			fail("需要周期性保号的号码需填写下次续费日期")
 			return
 		}
-		start, err := time.ParseInLocation(dateLayout, autoStart, time.Local)
+		var err error
+		expiryDate, err = time.ParseInLocation(dateLayout, expiry, time.Local)
 		if err != nil {
-			fail("开始日期格式应为 YYYY-MM-DD")
+			fail("下次续费日期格式应为 YYYY-MM-DD")
 			return
 		}
 		if autoPeriod < 1 || autoPeriod > 3650 {
 			fail("续费周期应为 1-3650 天")
 			return
 		}
-		expiryDate = start.AddDate(0, 0, autoPeriod)
-		expiry = expiryDate.Format(dateLayout)
+		autoStart = expiryDate.AddDate(0, 0, -autoPeriod).Format(dateLayout)
 	}
 	if renewalDays < 1 || renewalDays > 90 {
 		fail("续费提醒提前天数应为 1-90")
