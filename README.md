@@ -67,7 +67,7 @@ internal/auth/             bcrypt 密码、服务器端会话、CSRF
 internal/store/            数据访问层（users / numbers / notify / settings），全部参数化查询
 internal/notify/           通知渠道：Email（标准库 SMTP，含 AUTH LOGIN）、Telegram、WxPusher、飞书、钉钉
 internal/tgcall/           TG 未接来电闹铃：MTProto 用户账号（gotd/td）、tdata 导入、验证码登录
-internal/cronjob/          定时任务：自动续期滚动 → 到期提醒 → 数据清理 → 统计
+internal/cronjob/          定时任务：到期提醒 → 失败重投 → 数据清理 → 统计（周期滚动由「已续费」触发）
 internal/web/              路由、中间件、处理器、内嵌模板
 ```
 
@@ -111,7 +111,7 @@ internal/web/              路由、中间件、处理器、内嵌模板
 
 **行为对齐**
 
-- 两类提醒（续费/使用）、每号码独立提前天数、当天去重、自动续期 90/180/365 天滚动、过期号码不提醒等业务语义与 PHP 版一致。
+- 两类提醒（续费/使用）、每号码独立提前天数、当天去重、无需保号豁免、过期号码不提醒等业务语义与 PHP 版一致；周期号码改为「开始日期 + 周期」定义、由「已续费」手动滚动（Go 版语义，见下）。
 - 邮件正文沿用 multipart/alternative（纯文本 + 品牌样式 HTML），主题按 RFC 2047 编码；Telegram 发纯文本不带 parse_mode。
 
 **已省略**

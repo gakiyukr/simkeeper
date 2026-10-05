@@ -349,17 +349,17 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		status = "active"
 	}
 	// 保号方式二选一：keep 需要周期性保号 / none 无需保号。
-	// 周期自动计算只是「需要保号」内部的到期日录入方式（开关 auto_expiry_enabled），
-	// 不构成独立的保号方式——无论充值还是使用一次都需要人工操作。
+	// 需要保号的号码一律以「开始日期 + 周期」定义（保号本身就是循环操作，
+	// 没有非周期的例外）；到期日始终由此计算，滚动只在用户点「已续费」时发生。
 	mode := r.PostFormValue("keepalive_mode")
 	noKeepalive := mode == "none"
-	autoEnabled := !noKeepalive && r.PostFormValue("auto_expiry_enabled") == "1"
 	autoStart := strings.TrimSpace(r.PostFormValue("auto_start_date"))
 	autoPeriod := atoiDefault(r.PostFormValue("auto_expiry_period"), 0)
 	if noKeepalive {
-		// 无需保号：清空周期字段；到期日可留空或仅作备注
+		// 无需保号：清空周期字段；到期日不录入
 		autoStart, autoPeriod = "", 0
 	}
+	autoEnabled := !noKeepalive
 
 	// 校验失败回显用：以本次提交值构造实体——报错后表单不清空；
 	// 编辑模式下沿用原 ID（模板据 ID 区分编辑/新增）且回显用户改过的值而非库里旧值。
@@ -393,43 +393,25 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	}
 
 	if noKeepalive {
-		// 无需保号：到期日可选，仅作备注；不参与任何提醒与滚动
-		if expiry != "" {
-			var err error
-			expiryDate, err = time.ParseInLocation(dateLayout, expiry, time.Local)
-			if err != nil {
-				fail("到期日期格式应为 YYYY-MM-DD")
-				return
-			}
-		}
-	} else if autoEnabled {
-		// 周期自动续期：到期日 = 起始日 + 周期，手填到期日被忽略（与 PHP 版一致）
+		// 无需保号：不录入到期日，不参与任何提醒与滚动
+		expiry = ""
+	} else {
+		// 需要周期性保号：到期日 = 开始日期 + 周期
 		if autoStart == "" {
-			fail("周期自动续期需填写开始日期")
+			fail("需要周期性保号的号码需填写开始日期")
 			return
 		}
 		start, err := time.ParseInLocation(dateLayout, autoStart, time.Local)
 		if err != nil {
-			fail("周期开始日期格式应为 YYYY-MM-DD")
+			fail("开始日期格式应为 YYYY-MM-DD")
 			return
 		}
 		if autoPeriod < 1 || autoPeriod > 3650 {
-			fail("续期周期应为 1-3650 天")
+			fail("续费周期应为 1-3650 天")
 			return
 		}
 		expiryDate = start.AddDate(0, 0, autoPeriod)
 		expiry = expiryDate.Format(dateLayout)
-	} else {
-		if expiry == "" {
-			fail("请填写到期日期，或改选其他保号方式")
-			return
-		}
-		var err error
-		expiryDate, err = time.ParseInLocation(dateLayout, expiry, time.Local)
-		if err != nil {
-			fail("到期日期格式应为 YYYY-MM-DD")
-			return
-		}
 	}
 	if renewalDays < 1 || renewalDays > 90 {
 		fail("续费提醒提前天数应为 1-90")
@@ -483,9 +465,10 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	http.Redirect(w, r, "/numbers", http.StatusSeeOther)
 }
 
-// HandleNumberRenew 标记已续费：到期日重置为「今天 + 周期天数」，
-// 周期起点同步重置为今天（与运营商扣费后顺延一个完整周期的行为一致）。
-// 仅开启周期自动计算的号码开放；GET 访问直接回列表。
+// HandleNumberRenew 标记已续费：这是周期号码唯一的滚动机制——
+// 未过期时按原到期日锚定顺延一个周期（提前续费不吃亏），
+// 已过期则从今天起算（复活）；周期起点同步更新为新周期的开始。
+// GET 访问直接回列表。
 func (a *App) HandleNumberRenew(w http.ResponseWriter, r *http.Request) {
 	u := a.currentUser(r)
 	back := func(msg string, isErr bool) {
@@ -502,13 +485,18 @@ func (a *App) HandleNumberRenew(w http.ResponseWriter, r *http.Request) {
 		back("号码不存在", true)
 		return
 	}
-	if !n.AutoExpiryEnabled || n.AutoExpiryPeriod <= 0 {
-		back("仅开启周期自动计算的号码支持标记已续费", true)
+	if n.AutoExpiryPeriod <= 0 {
+		back("该号码未设置续费周期，请先编辑补填", true)
 		return
 	}
 	today := time.Now()
-	newExpiry := today.AddDate(0, 0, n.AutoExpiryPeriod).Format(dateLayout)
-	if _, err := a.Numbers.MarkRenewed(n.ID, u.ID, newExpiry, today.Format(dateLayout)); err != nil {
+	anchor := today
+	if t, err := time.ParseInLocation(dateLayout, n.ExpiryDate, time.Local); err == nil && t.After(today) {
+		anchor = t // 未过期：锚定原到期日，周期首尾相接
+	}
+	newStart := anchor.Format(dateLayout)
+	newExpiry := anchor.AddDate(0, 0, n.AutoExpiryPeriod).Format(dateLayout)
+	if _, err := a.Numbers.MarkRenewed(n.ID, u.ID, newExpiry, newStart); err != nil {
 		back("操作失败", true)
 		return
 	}
@@ -525,18 +513,6 @@ func (a *App) HandleNumberDelete(w http.ResponseWriter, r *http.Request) {
 		a.setFlash(w, "删除失败", true)
 	} else {
 		a.setFlash(w, "号码已删除", false)
-	}
-	http.Redirect(w, r, "/numbers", http.StatusSeeOther)
-}
-
-// HandleNumberDisableAuto 关闭自动续期（POST）。
-func (a *App) HandleNumberDisableAuto(w http.ResponseWriter, r *http.Request) {
-	u := a.currentUser(r)
-	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err := a.Numbers.DisableAutoExpiry(id, u.ID); err != nil {
-		a.setFlash(w, "操作失败", true)
-	} else {
-		a.setFlash(w, "已关闭自动续期，到期日保留为最近一次计算结果", false)
 	}
 	http.Redirect(w, r, "/numbers", http.StatusSeeOther)
 }

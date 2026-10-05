@@ -1,4 +1,6 @@
-// Package cronjob 实现定时任务：自动续期滚动、到期提醒分发、数据清理。
+// Package cronjob 实现定时任务：到期提醒分发、失败重投、数据清理。
+// 周期号码的滚动不由 cron 自动完成——由用户在号码页点「已续费」触发，
+// 未续费的号码到期后进入「已过期」分类等待复活或删除。
 // 语义对齐 PHP 版 cron.php：单实例部署下由进程内调度器周期触发，
 // 也可由管理后台手动触发一次，无需外部 crontab。
 package cronjob
@@ -61,17 +63,9 @@ func (j *Jobs) RunOnce(now time.Time) (sent, failed int, lines []string) {
 
 	logf("=== 定时任务开始执行 ===")
 
-	// 1. 自动续期：把已过期的自动续期号码滚到下一周期
-	updated, err := j.numbers.UpdateAutoExpiry(now)
-	if err != nil {
-		logf("更新自动续期号码失败: %v", err)
-	} else if updated > 0 {
-		logf("已更新 %d 个自动续期号码的到期时间", updated)
-	} else {
-		logf("没有需要更新的自动续期号码")
-	}
-
-	// 2. 到期提醒：按每号码独立的提前天数过滤，当天已发过的跳过
+	// 1. 到期提醒：按每号码独立的提前天数过滤，当天已发过的跳过。
+	// 注意：周期号码的滚动不再由 cron 自动完成——未续费的号码到期后
+	// 进入「已过期」分类，由用户点「已续费」顺延/复活。
 	numbers, err := j.numbers.ListExpiring()
 	if err != nil {
 		logf("读取号码失败: %v", err)
@@ -80,14 +74,13 @@ func (j *Jobs) RunOnce(now time.Time) (sent, failed int, lines []string) {
 		outcomes, sent, failed = j.sendDueNotifications(numbers, now, logf)
 		j.alertChannelFailures(outcomes, logf)
 	}
-
-	// 3. 重投：24 小时内失败的提醒通知，按失败后 1/2/3 小时的节奏重试，最多 3 次
+	// 2. 重投：24 小时内失败的提醒通知，按失败后 1/2/3 小时的节奏重试，最多 3 次
 	j.retryFailed(now, &sent, &failed, logf)
 
-	// 4. 清理：通知记录按保留天数、登录失败记录按 7 天、会话按过期时间
+	// 3. 清理：通知记录按保留天数、登录失败记录按 7 天、会话按过期时间
 	j.cleanup(logf)
 
-	// 5. 统计与最后执行时间
+	// 4. 统计与最后执行时间
 	j.recordStats(sent, failed, now, logf)
 
 	logf("=== 定时任务执行结束 ===")

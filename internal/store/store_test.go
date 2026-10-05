@@ -139,69 +139,6 @@ func TestNumbersQuotaDuplicateAndScope(t *testing.T) {
 	}
 }
 
-func TestNumberAutoExpiryRoll(t *testing.T) {
-	h := testDB(t)
-	nr := &NumberRepo{DB: h}
-	ur := &UserRepo{DB: h}
-	uid := mustUser(t, ur, "alice", "user")
-
-	now := time.Now()
-	today := now.Format("2006-01-02")
-	n := &PhoneNumber{
-		UserID: uid, PhoneNumber: "+4412345678", CountryCode: "GB", CountryName: "英国",
-		ExpiryDate: today, Status: "active",
-		AutoExpiryEnabled: true, AutoExpiryPeriod: 90,
-	}
-	id, err := nr.Create(n)
-	if err != nil {
-		t.Fatal(err)
-	}
-	updated, err := nr.UpdateAutoExpiry(now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if updated != 1 {
-		t.Fatalf("应滚动 1 条, got %d", updated)
-	}
-	got, err := nr.ByID(id, uid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := now.AddDate(0, 0, 90).Format("2006-01-02")
-	if got.ExpiryDate != want {
-		t.Errorf("到期日 = %s, want %s", got.ExpiryDate, want)
-	}
-	if got.AutoCalculatedExpiry != want {
-		t.Errorf("auto_calculated_expiry = %s, want %s", got.AutoCalculatedExpiry, want)
-	}
-}
-
-func TestNumberDisableAutoExpiry(t *testing.T) {
-	h := testDB(t)
-	nr := &NumberRepo{DB: h}
-	ur := &UserRepo{DB: h}
-	uid := mustUser(t, ur, "alice", "user")
-	n := &PhoneNumber{
-		UserID: uid, PhoneNumber: "+3312345678", CountryCode: "FR", CountryName: "法国",
-		ExpiryDate: "2099-01-01", Status: "active",
-		AutoExpiryEnabled: true, AutoExpiryPeriod: 90, AutoCalculatedExpiry: "2099-01-01",
-	}
-	id, err := nr.Create(n)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := nr.DisableAutoExpiry(id, uid); err != nil {
-		t.Fatal(err)
-	}
-	got, _ := nr.ByID(id, uid)
-	if got.AutoExpiryEnabled {
-		t.Error("关闭后 auto_expiry_enabled 应为 false")
-	}
-	if got.AutoCalculatedExpiry != "" {
-		t.Error("关闭后应清空 auto_calculated_expiry")
-	}
-}
-
 func TestNotifyConfigEncryptionRoundTrip(t *testing.T) {
 	h := testDB(t)
 	r := &NotifyRepo{DB: h}
@@ -456,14 +393,14 @@ func TestNumberMarkRenewed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n, err := r.MarkRenewed(numID, uid, "2026-11-02", "2026-08-04"); err != nil || n != 1 {
+	if n, err := r.MarkRenewed(numID, uid, "2027-03-31", "2026-12-31"); err != nil || n != 1 {
 		t.Fatalf("MarkRenewed 应命中 1 行, got %d, err %v", n, err)
 	}
 	got, err := r.ByID(numID, uid)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ExpiryDate != "2026-11-02" || got.AutoStartDate != "2026-08-04" || got.AutoCalculatedExpiry != "2026-11-02" {
+	if got.ExpiryDate != "2027-03-31" || got.AutoStartDate != "2026-12-31" || got.AutoCalculatedExpiry != "2027-03-31" {
 		t.Fatalf("到期日/起始日/计算到期日未同步更新: %+v", got)
 	}
 	// 他人调用不得命中（归属校验）

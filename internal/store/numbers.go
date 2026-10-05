@@ -154,9 +154,9 @@ func (r *NumberRepo) ListForUser(userID int64, page, limit int) ([]PhoneNumber, 
 	return r.list(` WHERE user_id = ?`, []any{userID}, page, limit)
 }
 
-// MarkRenewed 标记已续费：到期日重置为「今天 + 周期天数」并同步
-// auto_calculated_expiry 与 auto_start_date（新周期从今天起算，
-// 与运营商实际扣费后顺延的行为一致）。归属校验由 WHERE user_id 承担。
+// MarkRenewed 标记已续费：到期日与周期起点由调用方计算好写入
+//（未过期锚定原到期日顺延、已过期从今天起算），auto_calculated_expiry 同步。
+// 归属校验由 WHERE user_id 承担。这是周期号码唯一的滚动机制。
 func (r *NumberRepo) MarkRenewed(id, userID int64, newExpiry, today string) (int64, error) {
 	res, err := r.DB.Exec(
 		`UPDATE phone_numbers SET expiry_date = ?, auto_calculated_expiry = ?, auto_start_date = ?, updated_at = ?
@@ -208,70 +208,6 @@ func (r *NumberRepo) list(where string, args []any, page, limit int) ([]PhoneNum
 		out = append(out, *n)
 	}
 	return out, total, rows.Err()
-}
-
-// DisableAutoExpiry 关闭自动续期，到期日保留为最近一次自动计算结果。
-// 语义与 PHP 版 disableAutoExpiry 一致。
-func (r *NumberRepo) DisableAutoExpiry(id, userID int64) error {
-	_, err := r.DB.Exec(
-		`UPDATE phone_numbers SET
-		 auto_expiry_enabled = 0, auto_start_date = NULL, auto_expiry_period = NULL,
-		 expiry_date = COALESCE(auto_calculated_expiry, expiry_date),
-		 auto_calculated_expiry = NULL, updated_at = ?
-		 WHERE id = ? AND user_id = ?`,
-		db.Touch(time.Now()), id, userID,
-	)
-	return err
-}
-
-// UpdateAutoExpiry 把已过期的自动续期号码滚动到下一周期，返回受影响行数。
-// 新到期日 = 原到期日 + auto_expiry_period 天（与 PHP 版从原到期日累加的语义一致）。
-func (r *NumberRepo) UpdateAutoExpiry(today time.Time) (int64, error) {
-	rows, err := r.DB.Query(
-		`SELECT id, expiry_date, auto_expiry_period FROM phone_numbers
-		 WHERE auto_expiry_enabled = 1 AND status = 'active' AND expiry_date <= ?`,
-		today.Format("2006-01-02"),
-	)
-	if err != nil {
-		return 0, err
-	}
-	defer rows.Close()
-	type pending struct {
-		id     int64
-		expiry string
-		days   int
-	}
-	var batch []pending
-	for rows.Next() {
-		var p pending
-		var period int
-		if err := rows.Scan(&p.id, &p.expiry, &period); err != nil {
-			return 0, err
-		}
-		p.days = period
-		batch = append(batch, p)
-	}
-	if err := rows.Err(); err != nil {
-		return 0, err
-	}
-	var updated int64
-	for _, p := range batch {
-		base, err := time.ParseInLocation("2006-01-02", p.expiry, today.Location())
-		if err != nil {
-			continue
-		}
-		newExpiry := base.AddDate(0, 0, p.days).Format("2006-01-02")
-		res, err := r.DB.Exec(
-			`UPDATE phone_numbers SET expiry_date = ?, auto_calculated_expiry = ?, updated_at = ? WHERE id = ?`,
-			newExpiry, newExpiry, db.Touch(time.Now()), p.id,
-		)
-		if err != nil {
-			return updated, err
-		}
-		n, _ := res.RowsAffected()
-		updated += n
-	}
-	return updated, nil
 }
 
 // ListExpiring 列出活跃用户（status=active）名下全部活跃号码，

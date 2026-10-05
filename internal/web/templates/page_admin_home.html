@@ -12,7 +12,7 @@
   <div class="card-header row">
     <div>
       <h2 class="card-title">{{template "ico_refresh"}} 定时任务</h2>
-      <p class="card-desc">进程内置调度器按配置的间隔自动执行（自动续期滚动 → 到期提醒 → 数据清理），无需外部 crontab</p>
+      <p class="card-desc">进程内置调度器按配置的间隔自动执行（到期提醒 → 失败重投 → 数据清理）；周期号码的滚动由用户点「已续费」完成</p>
     </div>
     <form method="post" action="/admin/cron">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">

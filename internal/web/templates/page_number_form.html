@@ -2,8 +2,6 @@
 {{$N := .Content.N}}
 {{$mode := "keep"}}
 {{if $N}}{{if $N.NoKeepalive}}{{$mode = "none"}}{{end}}{{end}}
-{{$cycleOn := false}}
-{{if $N}}{{if $N.AutoExpiryEnabled}}{{$cycleOn = true}}{{end}}{{end}}
 <div class="page-head">
   <div>
     <h1 class="page-title">{{if and $N $N.ID}}编辑号码{{else}}添加号码{{end}}</h1>
@@ -43,12 +41,6 @@
           <datalist id="carrier-list">
             {{range .Content.Carriers}}<option value="{{.}}">{{end}}
           </datalist>
-        </div>
-        <div class="field">
-          <label class="label" for="n-expiry">精确到期日期</label>
-          <input class="input" type="date" id="n-expiry" name="expiry_date" value="{{with $N}}{{.ExpiryDate}}{{end}}"
-                 {{if and (ne $mode "none") (not $cycleOn)}}required{{end}}>
-          <p class="hint" id="expiry-field-hint">开启周期自动计算时忽略此字段；关闭时必填（无需保号可留空）</p>
         </div>
         <div class="field">
           <label class="label" for="n-amount">建议充值金额</label>
@@ -101,20 +93,16 @@
           </label>
         </div>
         <div id="keep-fields">
-          <label class="switch-row" for="auto-enable">
-            <span class="switch"><input type="checkbox" id="auto-enable" name="auto_expiry_enabled" value="1"
-                   {{if $cycleOn}}checked{{end}}><i></i></span>
-            <span class="txt">周期自动计算到期日<small>到期日 = 开始日期 + 周期，到期后自动顺延下一周期；关闭则直接填写到期日</small></span>
-          </label>
-          <div class="form-grid" id="cycle-fields">
+          <div class="form-grid">
             <div class="field">
               <label class="label" for="n-autostart">开始日期</label>
-              <input class="input" type="date" id="n-autostart" name="auto_start_date" value="{{with $N}}{{.AutoStartDate}}{{end}}">
+              <input class="input" type="date" id="n-autostart" name="auto_start_date" value="{{with $N}}{{.AutoStartDate}}{{end}}" required>
+              <p class="hint">本周期从这一天开始</p>
             </div>
             <div class="field">
-              <label class="label" for="n-autoperiod">周期（天，1-3650）</label>
+              <label class="label" for="n-autoperiod">续费周期（天，1-3650）</label>
               <input class="input" type="number" id="n-autoperiod" name="auto_expiry_period" min="1" max="3650"
-                     value="{{with $N}}{{if gt .AutoExpiryPeriod 0}}{{.AutoExpiryPeriod}}{{end}}{{end}}">
+                     value="{{with $N}}{{if gt .AutoExpiryPeriod 0}}{{.AutoExpiryPeriod}}{{end}}{{end}}" required>
               <div class="chip-row" id="period-chips">
                 <button type="button" class="chip" data-days="7">7 天</button>
                 <button type="button" class="chip" data-days="15">15 天</button>
@@ -123,6 +111,7 @@
                 <button type="button" class="chip" data-days="180">180 天</button>
                 <button type="button" class="chip" data-days="365">365 天</button>
               </div>
+              <p class="hint">到期后点「已续费」顺延一个周期</p>
             </div>
           </div>
         </div>
@@ -200,10 +189,8 @@ const SK_COUNTRIES = {{countryJSON .Content.Countries}};
 })();
 
 (function () {
-  const auto = document.getElementById('auto-enable'),
-        start = document.getElementById('n-autostart'),
+  const start = document.getElementById('n-autostart'),
         period = document.getElementById('n-autoperiod'),
-        expiry = document.getElementById('n-expiry'),
         out = document.getElementById('expiry-preview');
   const fmtCN = function (iso) {
     const p = iso.split('-');
@@ -219,35 +206,23 @@ const SK_COUNTRIES = {{countryJSON .Content.Countries}};
     return r ? r.value : 'keep';
   }
   function refresh() {
-    const m = currentMode();
-    const cycle = auto.checked;
-    document.getElementById('keep-fields').hidden = m !== 'keep';
-    document.getElementById('cycle-fields').hidden = !(m === 'keep' && cycle);
-    document.getElementById('n-expiry').required = m === 'keep' && !cycle;
+    document.getElementById('keep-fields').hidden = currentMode() !== 'keep';
     preview();
   }
   function preview() {
-    const m = currentMode();
-    if (m === 'none') {
-      out.textContent = '该号码无需保号：不参与到期提醒；到期日期可留空或仅作备注。';
+    if (currentMode() === 'none') {
+      out.textContent = '该号码无需保号：不参与到期提醒，无需填写周期。';
       return;
     }
-    if (auto.checked) {
-      const n = parseInt(period.value, 10);
-      if (!start.value || !n || n < 1) {
-        out.textContent = '开启周期计算后：到期日 = 开始日期 + 周期，到期自动顺延';
-        return;
-      }
-      const d = new Date(start.value + 'T00:00:00');
-      d.setDate(d.getDate() + n);
-      const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-      out.textContent = '开始：' + fmtCN(start.value) + ' → 到期：' + fmtCN(iso) + '（每 ' + n + ' 天自动顺延）';
-    } else if (expiry.value) {
-      const days = Math.round((new Date(expiry.value + 'T00:00:00') - new Date(new Date().toDateString())) / 86400000);
-      out.textContent = '到期：' + fmtCN(expiry.value) + '（' + (days < 0 ? '已过期 ' + (-days) + ' 天' : '剩余 ' + days + ' 天') + '）';
-    } else {
-      out.textContent = '填写精确到期日期，或开启周期自动计算。';
+    const n = parseInt(period.value, 10);
+    if (!start.value || !n || n < 1) {
+      out.textContent = '到期日 = 开始日期 + 周期；到期后点「已续费」顺延一个周期';
+      return;
     }
+    const d = new Date(start.value + 'T00:00:00');
+    d.setDate(d.getDate() + n);
+    const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    out.textContent = '开始：' + fmtCN(start.value) + ' → 到期：' + fmtCN(iso) + '（每 ' + n + ' 天，到期后点「已续费」顺延）';
   }
   document.querySelectorAll('#period-chips .chip').forEach(function (c) {
     c.addEventListener('click', function () { period.value = c.dataset.days; markChips(); preview(); });
@@ -255,7 +230,7 @@ const SK_COUNTRIES = {{countryJSON .Content.Countries}};
   document.querySelectorAll('input[name="keepalive_mode"]').forEach(function (r) {
     r.addEventListener('change', refresh);
   });
-  [auto, start, period, expiry].forEach(function (el) {
+  [start, period].forEach(function (el) {
     el.addEventListener('change', function () { markChips(); preview(); });
     el.addEventListener('input', function () { markChips(); preview(); });
   });

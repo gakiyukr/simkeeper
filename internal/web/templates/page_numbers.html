@@ -50,22 +50,12 @@
             </td>
             <td>{{if .NoKeepalive}}<span class="badge-sec">无需保号</span>{{else}}<span class="badge {{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span>{{end}}</td>
             <td>{{if ne .Status "inactive"}}<span class="badge badge-ok">使用中</span>{{else}}<span class="badge badge-muted">已停用</span>{{end}}</td>
-            <td>
-              {{if .AutoExpiryEnabled}}
-              <span style="display:inline-flex;align-items:center;gap:.4rem">
-                <span class="badge-sec">{{.AutoExpiryPeriod}} 天周期</span>
-                <form method="post" action="/numbers/{{.ID}}/disable-auto" class="inline">
-                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                  <button type="submit" class="btn btn-sm btn-ghost" title="关闭自动续期">关闭</button>
-                </form>
-              </span>
-              {{else}}<span class="muted">—</span>{{end}}
-            </td>
+            <td>{{if gt .AutoExpiryPeriod 0}}<span class="badge-sec">{{.AutoExpiryPeriod}} 天周期</span>{{else}}<span class="muted">—</span>{{end}}</td>
             <td>
               <div class="actions">
-                {{if and .AutoExpiryEnabled (gt .AutoExpiryPeriod 0)}}
+                {{if gt .AutoExpiryPeriod 0}}
                 <form method="post" action="/numbers/{{.ID}}/renew" class="inline"
-                      onsubmit="return confirm('确定已续费吗？到期日将重置为今天 + {{.AutoExpiryPeriod}} 天。')">
+                      onsubmit="return confirm('确定已续费吗？{{if lt (daysLeft .) 0}}号码已过期，将从今天起顺延 {{.AutoExpiryPeriod}} 天（复活）。{{else}}到期日将顺延 {{.AutoExpiryPeriod}} 天。{{end}}')">
                   <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                   <button type="submit" class="btn btn-sm btn-outline" title="续费完成：到期日顺延一个周期">已续费</button>
                 </form>
