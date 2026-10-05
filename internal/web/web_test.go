@@ -132,18 +132,18 @@ func TestFilterSortNumbers(t *testing.T) {
 	if got := filterSortNumbers(nums, "", "none", ""); len(got) != 1 || got[0].ID != 4 {
 		t.Errorf("无需保号分类应命中 ID=4, got %+v", got)
 	}
-	// 分类：已过期（停用过期号归入已过期，优先于已停用）
-	if got := filterSortNumbers(nums, "", "expired", ""); len(got) != 1 || got[0].ID != 2 {
-		t.Errorf("已过期分类应命中 ID=2, got %+v", got)
+	// 分类：号码已丢失（用户显式标记，优先于已过期）
+	if got := filterSortNumbers(nums, "", "inactive", ""); len(got) != 1 || got[0].ID != 2 {
+		t.Errorf("丢失分类应命中 ID=2, got %+v", got)
+	}
+	// 分类：已过期（排除丢失后无剩余）
+	if got := filterSortNumbers(nums, "", "expired", ""); len(got) != 0 {
+		t.Errorf("已过期分类应为空, got %+v", got)
 	}
 	// 分类：需要周期性保号（活跃未过期，含手动与周期）
 	got := filterSortNumbers(nums, "", "cycle", "")
 	if len(got) != 2 || got[0].ID != 1 || got[1].ID != 3 {
 		t.Errorf("周期保号分类应为 ID=1,3, got %+v", got)
-	}
-	// 分类：已停用（排除已过期与无需保号后无剩余）
-	if got := filterSortNumbers(nums, "", "inactive", ""); len(got) != 0 {
-		t.Errorf("已停用分类应为空, got %+v", got)
 	}
 	// 默认排序：到期升序，无需保号排最后
 	got = filterSortNumbers(nums, "", "", "")

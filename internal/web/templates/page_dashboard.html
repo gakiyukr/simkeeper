@@ -22,7 +22,7 @@
     <a class="chip {{if eq .Content.Cat "cycle"}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort "cycle"}}">需要周期性保号 <b>{{.Content.Counts.Cycle}}</b></a>
     <a class="chip {{if eq .Content.Cat "none"}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort "none"}}">无需保号 <b>{{.Content.Counts.None}}</b></a>
     <a class="chip {{if eq .Content.Cat "expired"}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort "expired"}}">已过期 <b>{{.Content.Counts.Expired}}</b></a>
-    <a class="chip {{if eq .Content.Cat "inactive"}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort "inactive"}}">已停用 <b>{{.Content.Counts.Inactive}}</b></a>
+    <a class="chip {{if eq .Content.Cat "inactive"}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort "inactive"}}">号码已丢失 <b>{{.Content.Counts.Lost}}</b></a>
   </div>
   <form method="get" action="/" class="toolbar">
     {{if .Content.Cat}}<input type="hidden" name="cat" value="{{.Content.Cat}}">{{end}}
@@ -55,10 +55,23 @@
               {{end}}{{end}}
             </td>
             <td>{{if .NoKeepalive}}<span class="badge-sec">无需保号</span>{{else}}<span class="badge {{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span>{{end}}</td>
-            <td>{{if ne .Status "inactive"}}<span class="badge badge-ok">使用中</span>{{else}}<span class="badge badge-muted">已停用</span>{{end}}</td>
+            <td>{{if ne .Status "inactive"}}<span class="badge badge-ok">使用中</span>{{else}}<span class="badge badge-muted">号码已丢失</span>{{end}}</td>
             <td>{{if gt .AutoExpiryPeriod 0}}<span class="badge-sec">{{.AutoExpiryPeriod}} 天周期</span>{{else}}<span class="muted">—</span>{{end}}</td>
             <td>
               <div class="actions">
+                {{if ne .Status "inactive"}}
+                <form method="post" action="/numbers/{{.ID}}/status" class="inline">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="status" value="inactive">
+                  <button type="submit" class="btn btn-sm btn-ghost" title="标记为号码丢失：仅作记录，不再提醒">丢失</button>
+                </form>
+                {{else}}
+                <form method="post" action="/numbers/{{.ID}}/status" class="inline">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="status" value="active">
+                  <button type="submit" class="btn btn-sm btn-ghost" title="恢复为使用中">恢复</button>
+                </form>
+                {{end}}
                 {{if gt .AutoExpiryPeriod 0}}
                 <form method="post" action="/numbers/{{.ID}}/renew" class="inline"
                       onsubmit="return confirm('确定已续费吗？{{if lt (daysLeft .) 0}}号码已过期，将从今天起顺延 {{.AutoExpiryPeriod}} 天（复活）。{{else}}到期日将顺延 {{.AutoExpiryPeriod}} 天。{{end}}')">

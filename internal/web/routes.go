@@ -36,6 +36,7 @@ func (a *App) Routes() http.Handler {
 	mux.Handle("GET /numbers/{id}/edit", a.requireLogin(a.HandleNumberEdit))
 	mux.Handle("POST /numbers/{id}/edit", a.requireLogin(a.csrfProtect(a.HandleNumberEdit)))
 	mux.Handle("POST /numbers/{id}/renew", a.requireLogin(a.csrfProtect(a.HandleNumberRenew)))
+	mux.Handle("POST /numbers/{id}/status", a.requireLogin(a.csrfProtect(a.HandleNumberSetStatus)))
 	mux.Handle("POST /numbers/{id}/delete", a.requireLogin(a.csrfProtect(a.HandleNumberDelete)))
 	mux.Handle("GET /notifications", a.requireLogin(a.HandleNotificationHistory))
 	mux.Handle("GET /notifications/config", a.requireLogin(a.HandleNotifyConfig))
