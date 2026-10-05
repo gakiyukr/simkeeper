@@ -30,6 +30,7 @@ type App struct {
 	DB       *db.DB
 	Users    *store.UserRepo
 	Numbers  *store.NumberRepo
+	Devices  *store.DeviceRepo
 	Notify   *store.NotifyRepo
 	Settings *store.SettingRepo
 	Sessions *auth.SessionStore
@@ -56,6 +57,7 @@ func New(database *db.DB) (*App, error) {
 		DB:       database,
 		Users:    &store.UserRepo{DB: database},
 		Numbers:  &store.NumberRepo{DB: database},
+		Devices:  &store.DeviceRepo{DB: database},
 		Notify:   &store.NotifyRepo{DB: database},
 		Settings: &store.SettingRepo{DB: database},
 		Sessions: &auth.SessionStore{DB: database},
@@ -151,22 +153,6 @@ func (a *App) requireLogin(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// requireAdmin 要求管理员，普通用户跳回首页，未登录去登录页。
-func (a *App) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		u := a.currentUser(r)
-		if u == nil {
-			http.Redirect(w, r, "/login", http.StatusFound)
-			return
-		}
-		if u.Role != "admin" {
-			http.Redirect(w, r, "/", http.StatusFound)
-			return
-		}
-		next(w, r)
-	}
-}
-
 // csrfProtect 对写方法执行 CSRF 校验；失败直接 403。
 // 所有状态变更入口必须经此包装——Go 版不存在 GET 触发状态变更的路径。
 func (a *App) csrfProtect(next http.HandlerFunc) http.HandlerFunc {
@@ -177,6 +163,37 @@ func (a *App) csrfProtect(next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(w, r)
 	}
+}
+
+// handleFlagSVG GET /flags/{code}.svg：内嵌国旗小图。通配符整段取值
+// （含 .svg 后缀），剥后缀后经白名单校验，不存在的代码 404；
+// 公开可缓存（无敏感内容，模板大量复用）。
+func (a *App) handleFlagSVG(w http.ResponseWriter, r *http.Request) {
+	code := strings.TrimSuffix(strings.ToLower(r.PathValue("code")), ".svg")
+	if !flagFiles[code] {
+		http.NotFound(w, r)
+		return
+	}
+	b, err := flagFS.ReadFile("flags/" + code + ".svg")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = w.Write(b)
+}
+
+// secureHeaders 基础安全响应头：防点击劫持与 MIME 嗅探。页面模板依赖
+// 内联 style/script，完整 CSP 需放开 'unsafe-inline' 意义有限，先上无副作用的三个。
+func (a *App) secureHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "same-origin")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // render 渲染指定页面模板。
@@ -199,7 +216,6 @@ type pageData struct {
 	ActiveNav  string
 	Content    any
 	Year       int
-	AllowReg   bool
 }
 
 // baseData 填充公共字段；user 可为 nil（登录页）。
@@ -213,7 +229,6 @@ func (a *App) baseData(r *http.Request, title string) pageData {
 		Title:     title,
 		User:      a.currentUser(r),
 		Year:      time.Now().Year(),
-		AllowReg:  a.Settings.GetInt("allow_registration", 1) == 1,
 		ActiveNav: strings.TrimPrefix(r.URL.Path, "/"),
 	}
 	if sess := a.currentSession(r); sess != nil {

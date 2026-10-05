@@ -1,14 +1,14 @@
 {{define "page_setup"}}{{template "authhead" .}}
 <div class="card auth-wide">
   <div class="card-header">
-    <h1 class="card-title">初始化 · 创建管理员</h1>
-    <p class="card-desc">系统还没有任何账号。这是唯一一次创建管理员的机会：设置完成后本页面将永久关闭。</p>
+    <h1 class="card-title">初始化 · 创建账号</h1>
+    <p class="card-desc">SimKeeper 是单账号系统。这是唯一一次创建账号的机会：设置完成后本页面将永久关闭。</p>
   </div>
   <div class="card-content">
     <form method="post" action="/setup">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <div class="field" style="margin-bottom:1rem">
-        <label class="label" for="s-username">管理员用户名</label>
+        <label class="label" for="s-username">用户名</label>
         <input class="input" type="text" id="s-username" name="username" required autofocus>
       </div>
       <div class="field" style="margin-bottom:1rem">
@@ -24,7 +24,7 @@
         <label class="label" for="s-confirm">确认密码</label>
         <input class="input" type="password" id="s-confirm" name="confirm_password" required>
       </div>
-      <button type="submit" class="btn" style="width:100%">创建管理员并进入登录页</button>
+      <button type="submit" class="btn" style="width:100%">创建账号并进入登录页</button>
     </form>
   </div>
 </div>

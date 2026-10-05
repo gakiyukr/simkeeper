@@ -59,7 +59,6 @@ func TestChannelSenderNonNilClient(t *testing.T) {
 	}
 }
 
-
 // TestDecodeJSONBodyRejectsNon2xx 回归：HTTP 状态码非 2xx 时必须报错，
 // 即使响应体看起来能解码——网关错误页缺失业务字段，零值解码会被
 // 误判为发送成功（失败告警与重投随之失效）。

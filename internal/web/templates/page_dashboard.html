@@ -5,7 +5,6 @@
     <p class="page-desc">共 {{.Content.TotalAll}} 个号码 · 到期前按各号码的提醒窗口推送通知</p>
   </div>
   <div class="page-actions">
-    <a class="btn btn-outline" href="/numbers/export">{{template "ico_download"}}导出 CSV</a>
     <a class="btn" href="/numbers/new">{{template "ico_plus"}}添加号码</a>
   </div>
 </div>
@@ -28,7 +27,8 @@
     {{if .Content.Cat}}<input type="hidden" name="cat" value="{{.Content.Cat}}">{{end}}
     <input class="input" type="text" name="q" value="{{.Content.Search}}" placeholder="搜索号码 / 国家 / 运营商 / 备注">
     <select class="select auto" name="sort">
-      <option value="expiry_asc" {{if ne .Content.Sort "expiry_desc"}}{{if ne .Content.Sort "created_desc"}}selected{{end}}{{end}}>到期日 ↑</option>
+      <option value="carrier" {{if or (eq .Content.Sort "carrier") (eq .Content.Sort "")}}selected{{end}}>运营商名称</option>
+      <option value="expiry_asc" {{if eq .Content.Sort "expiry_asc"}}selected{{end}}>到期日 ↑</option>
       <option value="expiry_desc" {{if eq .Content.Sort "expiry_desc"}}selected{{end}}>到期日 ↓</option>
       <option value="created_desc" {{if eq .Content.Sort "created_desc"}}selected{{end}}>最新添加</option>
     </select>
@@ -41,17 +41,20 @@
     <div class="tbl-wrap">
       <table class="tbl">
         <thead><tr>
-          <th>号码</th><th>国家 / 运营商</th><th>下次续费</th><th>剩余</th><th>状态</th>
+          <th>运营商</th><th>号码</th><th>下次续费</th><th>剩余</th><th>状态</th>
           <th>续费周期</th><th style="text-align:right">操作</th>
         </tr></thead>
         <tbody>
           {{range .Content.Numbers}}
           <tr>
             <td>
-              <span class="mono-strong phone-val">{{.PhoneNumber}}</span>
-              {{range secondaryLines .SecondaryNumbers}}<br><small class="muted phone-val" title="副卡">副 {{.}}</small>{{end}}
+              {{flagHTML .CountryCode}}{{if .Carrier}} <span class="carrier-name">{{.Carrier}}</span>{{end}}
+              {{if .DeviceID}}<br><small class="muted" title="安装设备">设备 {{index $.Content.DeviceNames .DeviceID}}</small>{{end}}
             </td>
-            <td>{{.CountryName}}{{if .Carrier}}<br><small class="muted">{{.Carrier}}</small>{{end}}</td>
+            <td class="nowrap">
+              <span class="mono-strong">{{fmtPhone .CountryCode .PhoneNumber}}</span>
+              {{range secondaryLines .}}<br><small class="muted" title="副卡">副 {{.}}</small>{{end}}
+            </td>
             <td>
               {{if .NoKeepalive}}<span class="muted">—</span>{{else}}{{.ExpiryDate}}{{if gt (cycleProgress .) -1}}
               <div class="progress" title="当前周期进度 {{cycleProgress .}}%"><i class="{{fillClass (daysLeft .)}}" style="width:{{cycleProgress .}}%"></i></div>
@@ -76,15 +79,38 @@
                 </form>
                 {{end}}
                 {{if gt .AutoExpiryPeriod 0}}
-                <form method="post" action="/numbers/{{.ID}}/renew" class="inline"
-                      onsubmit="return confirm('确定已续费吗？{{if lt (daysLeft .) 0}}号码已过期，将从今天起顺延 {{.AutoExpiryPeriod}} 天（复活）。{{else}}到期日将顺延 {{.AutoExpiryPeriod}} 天。{{end}}')">
-                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                  <button type="submit" class="btn btn-sm btn-outline" title="续费完成：到期日顺延一个周期">已续费</button>
-                </form>
+                <button type="button" class="btn btn-sm btn-outline" title="手动保号：选择新到期日的计算方式"
+                        onclick="skRenewOpen({{.ID}})">已续费</button>
+                <dialog id="renew-d{{.ID}}" class="renew-dialog" data-phone="{{fmtPhone .CountryCode .PhoneNumber}}"
+                        onclick="if(event.target===this)this.close()">
+                  <div class="renew-body">
+                    <div id="renew-s1-{{.ID}}">
+                      <h4>手动保号</h4>
+                      <p class="renew-hint">新到期日按哪种方式计算？按活跃间隔计算的运营商（如 giffgaff）选「从今天重新起算」；在原有效期上叠加的运营商（如 AIS）选「在原到期日上顺延」。</p>
+                      <button type="button" class="btn btn-outline renew-btn"
+                              data-mode="today" data-method="从今天重新起算" data-date="{{todayPlus .AutoExpiryPeriod}}"
+                              onclick="skRenewPick({{.ID}}, this)">从今天重新起算（{{todayPlus .AutoExpiryPeriod}} 到期）</button>
+                      <button type="button" class="btn btn-outline renew-btn"
+                              data-mode="extend" data-method="在原到期日上顺延" data-date="{{expiryPlus .}}"
+                              onclick="skRenewPick({{.ID}}, this)">在原到期日上顺延（{{expiryPlus .}} 到期）</button>
+                      <button type="button" class="btn btn-ghost renew-btn" onclick="document.getElementById('renew-d{{.ID}}').close()">取消</button>
+                    </div>
+                    <div id="renew-s2-{{.ID}}" hidden>
+                      <h4>确认保号</h4>
+                      <p class="renew-hint" id="renew-txt-{{.ID}}"></p>
+                      <form method="post" action="/numbers/{{.ID}}/renew" class="renew-opt">
+                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                        <input type="hidden" name="mode" id="renew-mode-{{.ID}}" value="">
+                        <button type="submit" class="btn btn-destructive renew-btn">确认，我已完成保号</button>
+                      </form>
+                      <button type="button" class="btn btn-ghost renew-btn" onclick="skRenewBack({{.ID}})">返回</button>
+                    </div>
+                  </div>
+                </dialog>
                 {{end}}
                 <a class="btn btn-sm btn-outline" href="/numbers/{{.ID}}/edit">编辑</a>
                 <form method="post" action="/numbers/{{.ID}}/delete" class="inline"
-                      onsubmit="return confirm('确定删除号码 {{.PhoneNumber}} 吗？此操作不可恢复。')">
+                      onsubmit="return confirm('确定删除号码 {{fmtPhone .CountryCode .PhoneNumber}} 吗？此操作不可恢复。')">
                   <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                   <button type="submit" class="btn btn-sm btn-destructive">删除</button>
                 </form>
@@ -134,4 +160,24 @@
     {{end}}
   </div>
 </div>
+<script>
+function skRenewOpen(id) {
+  document.getElementById('renew-s1-' + id).hidden = false;
+  document.getElementById('renew-s2-' + id).hidden = true;
+  document.getElementById('renew-d' + id).showModal();
+}
+function skRenewPick(id, el) {
+  var dlg = document.getElementById('renew-d' + id);
+  document.getElementById('renew-mode-' + id).value = el.dataset.mode;
+  document.getElementById('renew-txt-' + id).textContent =
+    '请确认你已实际完成该号码的保号（充值或使用一次）。号码 ' + dlg.dataset.phone +
+    ' 的到期日将按「' + el.dataset.method + '」更新为 ' + el.dataset.date + '，提交后立即生效。';
+  document.getElementById('renew-s1-' + id).hidden = true;
+  document.getElementById('renew-s2-' + id).hidden = false;
+}
+function skRenewBack(id) {
+  document.getElementById('renew-s2-' + id).hidden = true;
+  document.getElementById('renew-s1-' + id).hidden = false;
+}
+</script>
 {{template "foot" .}}{{end}}

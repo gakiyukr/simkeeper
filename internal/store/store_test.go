@@ -2,6 +2,7 @@ package store
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,7 +47,7 @@ func mustUser(t *testing.T, r *UserRepo, name, role string) int64 {
 	return id
 }
 
-func TestUserAuthenticateAndStatus(t *testing.T) {
+func TestUserAuthenticate(t *testing.T) {
 	h := testDB(t)
 	r := &UserRepo{DB: h}
 	id := mustUser(t, r, "alice", "admin")
@@ -60,38 +61,9 @@ func TestUserAuthenticateAndStatus(t *testing.T) {
 	if _, ok, _ := r.Authenticate("nobody", "password123"); ok {
 		t.Error("不存在的用户不应通过")
 	}
-	if err := r.SetStatus(id, "banned"); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok, _ := r.Authenticate("alice", "password123"); ok {
-		t.Error("被封禁后不应通过")
-	}
-	if n, _ := r.CountAdmins(); n != 0 {
-		t.Errorf("被封禁的管理员不应计入, got %d", n)
-	}
-	if err := r.Delete(id); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := r.ByID(id); err != ErrNotFound {
-		t.Errorf("删除后应返回 ErrNotFound, got %v", err)
-	}
 }
 
-func TestUserListSearch(t *testing.T) {
-	h := testDB(t)
-	r := &UserRepo{DB: h}
-	mustUser(t, r, "alpha", "user")
-	mustUser(t, r, "beta", "user")
-	users, total, err := r.List(1, 20, "alp")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if total != 1 || len(users) != 1 || users[0].Username != "alpha" {
-		t.Errorf("搜索 alpha 应命中 1 条, got %d/%v", total, users)
-	}
-}
-
-func TestNumbersQuotaDuplicateAndScope(t *testing.T) {
+func TestNumbersDuplicateAndScope(t *testing.T) {
 	h := testDB(t)
 	nr := &NumberRepo{DB: h}
 	ur := &UserRepo{DB: h}
@@ -124,18 +96,6 @@ func TestNumbersQuotaDuplicateAndScope(t *testing.T) {
 	// 排除自身后为 0（编辑场景）
 	if cnt, _ := nr.CountDuplicate(uid, "+85291234567", id); cnt != 0 {
 		t.Errorf("排除自身后应计 0, got %d", cnt)
-	}
-
-	// 配额只计 active：停用后计数为 0
-	if cnt, _ := nr.CountForUser(uid); cnt != 1 {
-		t.Errorf("active 配额应计 1, got %d", cnt)
-	}
-	n.Status = "inactive"
-	if err := nr.Update(n); err != nil {
-		t.Fatal(err)
-	}
-	if cnt, _ := nr.CountForUser(uid); cnt != 0 {
-		t.Errorf("停用后配额应计 0, got %d", cnt)
 	}
 }
 
@@ -299,9 +259,6 @@ func TestSettingsAndLoginAttempts(t *testing.T) {
 	if v, _ := s.Get("site_name"); v != "测试站" {
 		t.Errorf("site_name = %q", v)
 	}
-	if got := s.GetInt("max_numbers_per_user", 0); got != 50 {
-		t.Errorf("预置默认值应为 50, got %d", got)
-	}
 	if got := s.GetInt("nonexistent", 7); got != 7 {
 		t.Errorf("缺失键应回退, got %d", got)
 	}
@@ -337,7 +294,6 @@ func TestSchemaMigrationsIdempotent(t *testing.T) {
 		t.Errorf("schema_migrations 应记录版本 1, got %d 行", n)
 	}
 }
-
 
 // TestFailedForRetryCarriesCreatedAt 回归：SELECT 漏选 created_at 会导致
 // 重投节奏推算失败、全部记录被静默跳过（重投永不执行）。
@@ -379,7 +335,6 @@ func TestFailedForRetryCarriesCreatedAt(t *testing.T) {
 	}
 }
 
-
 // TestNumberMarkRenewed 标记已续费：到期日与起始日重置、归属校验生效。
 func TestNumberMarkRenewed(t *testing.T) {
 	h := testDB(t)
@@ -409,6 +364,42 @@ func TestNumberMarkRenewed(t *testing.T) {
 	}
 }
 
+// TestListExpiringCarriesPlanAndSecondaries 回归：ListExpiring 的 SELECT 列表
+// 必须与 scanNumber 的列集一致——漏列/错位会让定时任务整轮读取号码失败
+// （sql: expected N destination arguments），到期提醒静默瘫痪。
+func TestListExpiringCarriesPlanAndSecondaries(t *testing.T) {
+	h := testDB(t)
+	r := &NumberRepo{DB: h}
+	uid := mustUser(t, &UserRepo{DB: h}, "planner", "user")
+	id, err := r.Create(&PhoneNumber{
+		UserID: uid, PhoneNumber: "+85269000000", CountryCode: "HK", CountryName: "香港",
+		ExpiryDate: "2099-01-01", Status: "active",
+		PlanName:         "30 天不限流量",
+		SecondaryNumbers: "+85269000001\n+85269000002",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nums, err := r.ListExpiring()
+	if err != nil {
+		t.Fatalf("ListExpiring 查询失败（多为 SELECT 列与 scanNumber 不一致）: %v", err)
+	}
+	var got *PhoneNumber
+	for i := range nums {
+		if nums[i].ID == id {
+			got = &nums[i]
+		}
+	}
+	if got == nil {
+		t.Fatalf("ListExpiring 应包含号码 %d, got %+v", id, nums)
+	}
+	if got.PlanName != "30 天不限流量" {
+		t.Errorf("plan_name 未选出或列序错位: %q", got.PlanName)
+	}
+	if got.SecondaryNumbers != "+85269000001\n+85269000002" {
+		t.Errorf("secondary_numbers 未选出或列序错位: %q", got.SecondaryNumbers)
+	}
+}
 
 // TestNoKeepaliveRoundTripAndExclusion 无需保号：字段往返；到期提醒与周期滚动均排除。
 func TestNoKeepaliveRoundTripAndExclusion(t *testing.T) {
@@ -448,5 +439,127 @@ func TestNoKeepaliveRoundTripAndExclusion(t *testing.T) {
 	}
 	if ids[nkID] || !ids[normalID] {
 		t.Fatalf("ListExpiring 应排除无需保号: %+v", ids)
+	}
+}
+
+// TestNumberSimTypeAndESIMSecrets 号码类型与 eSIM 激活信息：
+// 密文落库、读回解密、类型归一化、切回实体卡清空、ListExpiring 列集一致。
+func TestNumberSimTypeAndESIMSecrets(t *testing.T) {
+	h := testDB(t)
+	r := &NumberRepo{DB: h}
+	uid := mustUser(t, &UserRepo{DB: h}, "esimer", "user")
+	id, err := r.Create(&PhoneNumber{
+		UserID: uid, PhoneNumber: "+819012345678", CountryCode: "JP", CountryName: "日本",
+		ExpiryDate: "2099-01-01", Status: "active", SimType: "esim",
+		LPAString: "LPA:1$rsp.example.com$ABCD-001", ConfirmCode: "654321",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 库里必须是密文，不能出现 LPA 明文片段
+	var rawLPA, rawConfirm string
+	if err := h.QueryRow(`SELECT lpa_string, confirm_code FROM phone_numbers WHERE id = ?`, id).
+		Scan(&rawLPA, &rawConfirm); err != nil {
+		t.Fatal(err)
+	}
+	if !secret.IsEncrypted(rawLPA) || strings.Contains(rawLPA, "rsp.example.com") {
+		t.Errorf("LPA 应以密文落库, got %q", rawLPA)
+	}
+	if !secret.IsEncrypted(rawConfirm) {
+		t.Errorf("确认码应以密文落库, got %q", rawConfirm)
+	}
+
+	// 读回解密还原
+	got, err := r.ByID(id, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SimType != "esim" || got.LPAString != "LPA:1$rsp.example.com$ABCD-001" || got.ConfirmCode != "654321" {
+		t.Errorf("eSIM 信息往返不一致: %+v", got)
+	}
+
+	// SimType 空值归一化为 physical，且无激活信息
+	phyID, err := r.Create(&PhoneNumber{
+		UserID: uid, PhoneNumber: "+819012345679", CountryCode: "JP", CountryName: "日本",
+		ExpiryDate: "2099-01-01", Status: "active",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	phy, _ := r.ByID(phyID, uid)
+	if phy.SimType != "physical" || phy.LPAString != "" {
+		t.Errorf("默认应为 physical 且无 LPA: %+v", phy)
+	}
+
+	// 切回实体卡：类型改写、激活信息清空
+	got.SimType = "physical"
+	got.LPAString, got.ConfirmCode = "", ""
+	if err := r.Update(got); err != nil {
+		t.Fatal(err)
+	}
+	var cnt int
+	if err := h.QueryRow(`SELECT COUNT(*) FROM phone_numbers WHERE id = ? AND lpa_string IS NULL`, id).Scan(&cnt); err != nil || cnt != 1 {
+		t.Errorf("切回实体卡后 LPA 应清空, got %d/%v", cnt, err)
+	}
+
+	// ListExpiring 的列集必须与 scanNumber 一致（含新列）
+	if _, err := r.ListExpiring(); err != nil {
+		t.Fatalf("ListExpiring 查询失败: %v", err)
+	}
+}
+
+// TestDevicesCRUDAndDetach 设备管理：增改查、归属隔离、删除时名下号码解绑。
+func TestDevicesCRUDAndDetach(t *testing.T) {
+	h := testDB(t)
+	dr := &DeviceRepo{DB: h}
+	nr := &NumberRepo{DB: h}
+	uid := mustUser(t, &UserRepo{DB: h}, "dev", "user")
+
+	id, err := dr.Create(&Device{UserID: uid, Name: "iPhone 15", DeviceType: "phone", Notes: "主力机"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := dr.ByID(id, uid)
+	if err != nil || got.Name != "iPhone 15" || got.DeviceType != "phone" {
+		t.Fatalf("设备读取不一致: %+v %v", got, err)
+	}
+	if _, err := dr.ByID(id, uid+999); err != ErrNotFound {
+		t.Errorf("非归属用户应 ErrNotFound, got %v", err)
+	}
+
+	numID, err := nr.Create(&PhoneNumber{
+		UserID: uid, PhoneNumber: "+819012345678", CountryCode: "JP", CountryName: "日本",
+		ExpiryDate: "2099-01-01", Status: "active", DeviceID: id,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := nr.ByID(numID, uid); n.DeviceID != id {
+		t.Errorf("device_id 应往返保留, got %d", n.DeviceID)
+	}
+
+	got.Name, got.DeviceType = "iPhone 15 Pro", "tablet"
+	if err := dr.Update(got); err != nil {
+		t.Fatal(err)
+	}
+	if g2, _ := dr.ByID(id, uid); g2.Name != "iPhone 15 Pro" || g2.DeviceType != "tablet" {
+		t.Errorf("更新未生效: %+v", g2)
+	}
+
+	if err := dr.Delete(id, uid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dr.ByID(id, uid); err != ErrNotFound {
+		t.Errorf("删除后应 ErrNotFound, got %v", err)
+	}
+	if n, _ := nr.ByID(numID, uid); n.DeviceID != 0 {
+		t.Errorf("删除设备后号码应解绑, got %d", n.DeviceID)
+	}
+
+	d2, _ := dr.Create(&Device{UserID: uid, Name: "随身 WiFi", DeviceType: "modem"})
+	devs, err := dr.ListForUser(uid)
+	if err != nil || len(devs) != 1 || devs[0].ID != d2 {
+		t.Errorf("列表应只剩 1 台, got %+v %v", devs, err)
 	}
 }

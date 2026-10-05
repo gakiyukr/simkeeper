@@ -1,39 +1,41 @@
 package web
 
 import (
-	crand "crypto/rand"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"simkeeper/internal/auth"
 	"simkeeper/internal/cronjob"
 	"simkeeper/internal/store"
 )
 
-// AdminStats 管理端首页统计。
+// AdminStats 管理后台统计卡。
 type AdminStats struct {
-	ActiveUsers  int
-	AdminCount   int
-	Numbers      int
-	Expiring7    int
-	SentTotal    int
-	FailedTotal  int
-	LastCronRun  string
-	RecentNotifs []store.Notification
+	Numbers     int
+	Expiring7   int
+	SentTotal   int
+	FailedTotal int
+	LastCronRun string
 }
 
-// HandleAdminHome 管理端首页。
+// AdminPage 管理后台页数据：统计 + 系统设置 + 最近通知（合并为一页）。
+type AdminPage struct {
+	Stats         AdminStats
+	SiteName      string
+	RetentionDays int
+	RecentNotifs  []store.Notification
+}
+
+// HandleAdminHome 管理后台：统计、定时任务、系统设置与最近通知合并一页。
 func (a *App) HandleAdminHome(w http.ResponseWriter, r *http.Request) {
 	d := a.baseData(r, "管理后台")
 	d.ActiveNav = "admin"
 	stats := AdminStats{}
 	today := time.Now()
 
-	_ = a.DB.QueryRow(`SELECT COUNT(*) FROM users WHERE status='active'`).Scan(&stats.ActiveUsers)
-	_ = a.DB.QueryRow(`SELECT COUNT(*) FROM users WHERE role='admin' AND status='active'`).Scan(&stats.AdminCount)
 	_ = a.DB.QueryRow(`SELECT COUNT(*) FROM phone_numbers WHERE status='active'`).Scan(&stats.Numbers)
 	_ = a.DB.QueryRow(
 		`SELECT COUNT(*) FROM phone_numbers WHERE status='active' AND expiry_date >= ? AND expiry_date <= ?`,
@@ -42,249 +44,231 @@ func (a *App) HandleAdminHome(w http.ResponseWriter, r *http.Request) {
 	_ = a.DB.QueryRow(`SELECT setting_value FROM system_settings WHERE setting_key='total_sent'`).Scan(&stats.SentTotal)
 	_ = a.DB.QueryRow(`SELECT setting_value FROM system_settings WHERE setting_key='last_cron_run'`).Scan(&stats.LastCronRun)
 	_ = a.DB.QueryRow(`SELECT COUNT(*) FROM notifications WHERE status='failed'`).Scan(&stats.FailedTotal)
-	stats.RecentNotifs, _, _ = a.Notify.ListForAdmin(1, 8, "")
+	recent, _, _ := a.Notify.ListForAdmin(1, 8, "")
 
-	d.Content = stats
+	d.Content = AdminPage{
+		Stats:         stats,
+		SiteName:      getStr(a, "site_name", "SimKeeper"),
+		RetentionDays: a.Settings.GetInt("log_retention_days", 90),
+		RecentNotifs:  recent,
+	}
 	a.render(w, http.StatusOK, "page_admin_home", d)
 }
 
-// AdminUsersPage 用户管理列表数据。
-type AdminUsersPage struct {
-	Users  []store.User
-	Total  int
-	Page   int
-	Pages  int
-	Search string
-}
-
-// HandleAdminUsers 用户管理：列表 + 封禁/解禁/删除/角色。
-// 写操作全部 POST + CSRF + 自身/最后管理员保护（修复 PHP 版可删光管理员的问题）。
-func (a *App) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
-	d := a.baseData(r, "用户管理")
-	d.ActiveNav = "admin/users"
-	me := a.currentUser(r)
-
-	if r.Method == http.MethodPost {
-		a.adminUserAction(w, r, me.ID, &d)
-		return
-	}
-	search := strings.TrimSpace(r.URL.Query().Get("q"))
-	pageNum := atoiDefault(r.URL.Query().Get("page"), 1)
-	users, total, err := a.Users.List(pageNum, 20, search)
-	if err != nil {
-		http.Error(w, "内部错误", http.StatusInternalServerError)
-		return
-	}
-	pages := (total + 19) / 20
-	if pages < 1 {
-		pages = 1
-	}
-	d.Content = AdminUsersPage{Users: users, Total: total, Page: pageNum, Pages: pages, Search: search}
-	a.render(w, http.StatusOK, "page_admin_users", d)
-}
-
-// adminUserAction 处理单个用户管理动作。
-func (a *App) adminUserAction(w http.ResponseWriter, r *http.Request, myID int64, d *pageData) {
-	action := r.PostFormValue("action")
-	targetID, _ := strconv.ParseInt(r.PostFormValue("user_id"), 10, 64)
-	back := func(msg string, isErr bool) {
-		a.setFlash(w, msg, isErr)
-		http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
-	}
-	if targetID <= 0 {
-		back("无效的用户", true)
-		return
-	}
-	target, err := a.Users.ByID(targetID)
-	if err != nil {
-		back("用户不存在", true)
-		return
-	}
-	// 保护规则：不能操作自己（避免误删/误封当前登录会话）
-	if targetID == myID {
-		back("不能对当前登录账号执行该操作", true)
-		return
-	}
-
-	switch action {
-	case "ban", "delete":
-		// 保护规则：不允许封禁/删除最后一名 active 管理员
-		if target.Role == "admin" {
-			n, err := a.Users.CountAdmins()
-			if err != nil || n <= 1 {
-				back("系统至少需要保留一名管理员", true)
-				return
-			}
-		}
-		if action == "ban" {
-			if err := a.Users.SetStatus(targetID, "banned"); err != nil {
-				back("操作失败", true)
-				return
-			}
-			_ = a.Sessions.DestroyForUser(targetID)
-			back("用户已封禁", false)
-		} else {
-			if err := a.Users.Delete(targetID); err != nil {
-				back("删除失败", true)
-				return
-			}
-			back("用户已删除", false)
-		}
-	case "unban":
-		if err := a.Users.SetStatus(targetID, "active"); err != nil {
-			back("操作失败", true)
-			return
-		}
-		back("用户已解禁", false)
-	case "resetpw":
-		// 管理员重置密码：生成随机临时密码，仅本次通过提示显示
-		const charset = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
-		raw := make([]byte, 12)
-		if _, err := crand.Read(raw); err != nil {
-			back("生成临时密码失败", true)
-			return
-		}
-		for i := range raw {
-			raw[i] = charset[int(raw[i])%len(charset)]
-		}
-		newHash, err := auth.HashPassword(string(raw))
-		if err != nil {
-			back("内部错误", true)
-			return
-		}
-		if err := a.Users.UpdatePassword(targetID, newHash); err != nil {
-			back("重置失败", true)
-			return
-		}
-		_ = a.Sessions.DestroyForUser(targetID)
-		back("已重置 "+target.Username+" 的密码，临时密码："+string(raw)+"（仅显示一次，请立即转告用户登录修改）", false)
-	case "role":
-		role := r.PostFormValue("role")
-		if role != "user" && role != "admin" {
-			back("无效的角色", true)
-			return
-		}
-		// 降级最后一名管理员同样不允许
-		if target.Role == "admin" && role == "user" {
-			n, err := a.Users.CountAdmins()
-			if err != nil || n <= 1 {
-				back("系统至少需要保留一名管理员", true)
-				return
-			}
-		}
-		if err := a.Users.SetRole(targetID, role); err != nil {
-			back("操作失败", true)
-			return
-		}
-		_ = a.Sessions.DestroyForUser(targetID)
-		back("角色已调整", false)
-	default:
-		back("未知操作", true)
-	}
-}
-
-// AdminNumbersPage 管理端号码列表数据。
-type AdminNumbersPage struct {
-	Numbers []store.PhoneNumber
-	Total   int
-	Page    int
-	Pages   int
-	Search  string
-}
-
-// HandleAdminNumbers 管理端号码列表。
-func (a *App) HandleAdminNumbers(w http.ResponseWriter, r *http.Request) {
-	d := a.baseData(r, "全部号码")
-	d.ActiveNav = "admin/numbers"
-	search := strings.TrimSpace(r.URL.Query().Get("q"))
-	pageNum := atoiDefault(r.URL.Query().Get("page"), 1)
-	numbers, total, err := a.Numbers.ListForAdmin(pageNum, 20, search)
-	if err != nil {
-		http.Error(w, "内部错误", http.StatusInternalServerError)
-		return
-	}
-	pages := (total + 19) / 20
-	if pages < 1 {
-		pages = 1
-	}
-	d.Content = AdminNumbersPage{Numbers: numbers, Total: total, Page: pageNum, Pages: pages, Search: search}
-	a.render(w, http.StatusOK, "page_admin_numbers", d)
-}
-
-// HandleAdminExport 导出全部号码 CSV（管理端）。
-func (a *App) HandleAdminExport(w http.ResponseWriter, r *http.Request) {
-	numbers, _, err := a.Numbers.ListForAdmin(1, 1000000, "")
-	if err != nil {
-		http.Error(w, "内部错误", http.StatusInternalServerError)
-		return
-	}
-	var b strings.Builder
-	// UTF-8 BOM：让 Excel 正确识别中文
-	b.WriteString("\xef\xbb\xbf")
-	b.WriteString("号码,用户ID,国家代码,国家,运营商,到期日,剩余天数,状态\n")
-	for _, n := range numbers {
-		b.WriteString(csvRow(n.PhoneNumber, strconv.FormatInt(n.UserID, 10), n.CountryCode,
-			n.CountryName, n.Carrier, n.ExpiryDate,
-			strconv.Itoa(n.DaysLeft(time.Now())), n.Status))
-	}
-	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-	w.Header().Set("Content-Disposition", "attachment; filename=all_numbers.csv")
-	_, _ = w.Write([]byte(b.String()))
-}
-
-// AdminSettingsPage 系统设置页数据。
-type AdminSettingsPage struct {
-	SiteName      string
-	MaxNumbers    int
-	RetentionDays int
-	AllowReg      bool
-}
-
-// HandleAdminSettings 系统设置（GET 展示 / POST 保存）。
-// 修复 PHP 版 reset_stats 引用不存在列的问题：Go 版不提供该坏功能。
+// HandleAdminSettings 保存系统设置（POST + CSRF）；设置表单展示在管理后台首页，
+// 旧地址 /admin/settings 已重定向到 /admin。
 func (a *App) HandleAdminSettings(w http.ResponseWriter, r *http.Request) {
-	d := a.baseData(r, "系统设置")
-	d.ActiveNav = "admin/settings"
-
-	if r.Method == http.MethodPost {
-		siteName := strings.TrimSpace(r.PostFormValue("site_name"))
-		maxNumbers := atoiDefault(r.PostFormValue("max_numbers_per_user"), 50)
-		retention := atoiDefault(r.PostFormValue("log_retention_days"), 90)
-		allowReg := r.PostFormValue("allow_registration") == "1"
-		if siteName == "" {
-			siteName = "SimKeeper"
-		}
-		if maxNumbers < 1 {
-			maxNumbers = 50
-		}
-		if retention < 1 {
-			retention = 90
-		}
-		sets := [][2]string{
-			{"site_name", siteName},
-			{"max_numbers_per_user", strconv.Itoa(maxNumbers)},
-			{"log_retention_days", strconv.Itoa(retention)},
-			{"allow_registration", boolStr(allowReg)},
-		}
-		for _, kv := range sets {
-			if err := a.Settings.Set(kv[0], kv[1]); err != nil {
-				d.Flash, d.FlashIsErr = "保存失败："+kv[0], true
-				a.render(w, http.StatusOK, "page_admin_settings", d)
-				return
-			}
-		}
-		a.setFlash(w, "设置已保存", false)
-		http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/admin", http.StatusMovedPermanently)
 		return
 	}
-	page := AdminSettingsPage{
-		SiteName:      getStr(a, "site_name", "SimKeeper"),
-		MaxNumbers:    a.Settings.GetInt("max_numbers_per_user", 50),
-		RetentionDays: a.Settings.GetInt("log_retention_days", 90),
-		AllowReg:      a.Settings.GetInt("allow_registration", 1) == 1,
+	siteName := strings.TrimSpace(r.PostFormValue("site_name"))
+	retention := atoiDefault(r.PostFormValue("log_retention_days"), 90)
+	if siteName == "" {
+		siteName = "SimKeeper"
 	}
-	d.Content = page
-	a.render(w, http.StatusOK, "page_admin_settings", d)
+	if retention < 1 {
+		retention = 90
+	}
+	sets := [][2]string{
+		{"site_name", siteName},
+		{"log_retention_days", strconv.Itoa(retention)},
+	}
+	for _, kv := range sets {
+		if err := a.Settings.Set(kv[0], kv[1]); err != nil {
+			a.setFlash(w, "保存失败："+kv[0], true)
+			http.Redirect(w, r, "/admin", http.StatusSeeOther)
+			return
+		}
+	}
+	a.setFlash(w, "设置已保存", false)
+	http.Redirect(w, r, "/admin", http.StatusSeeOther)
+}
+
+// numberExport SIMHub 兼容的卡片结构（formatVersion 5），字段名与其备份文件一致，
+// 导出后可直接导入该类应用。无法映射的专有字段留空。
+type numberExport struct {
+	ActivationCode              string   `json:"activationCode"`
+	ActivationDate              string   `json:"activationDate"`
+	AutoTopUpEnabled            bool     `json:"autoTopUpEnabled"`
+	CardBackgroundAssetName     string   `json:"cardBackgroundAssetName"`
+	CardColorHex                string   `json:"cardColorHex"`
+	Carrier                     string   `json:"carrier"`
+	CarrierAppIconURLString     string   `json:"carrierAppIconURLString"`
+	CarrierAppName              string   `json:"carrierAppName"`
+	CarrierAppStoreURLString    string   `json:"carrierAppStoreURLString"`
+	ConfirmationCode            string   `json:"confirmationCode"`
+	CountryCode                 string   `json:"countryCode"`
+	CountryName                 string   `json:"countryName"`
+	CreatedAt                   string   `json:"createdAt"`
+	CurrencyCode                string   `json:"currencyCode"`
+	CurrentBalance              string   `json:"currentBalance"`
+	CurrentBalanceMinorUnits    int      `json:"currentBalanceMinorUnits"`
+	CustomPrompt                string   `json:"customPrompt"`
+	CyclePaymentMinorUnits      int      `json:"cyclePaymentMinorUnits"`
+	EID                         string   `json:"eid"`
+	ExpiryDate                  string   `json:"expiryDate"`
+	Flag                        string   `json:"flag"`
+	ID                          string   `json:"id"`
+	IsLongTerm                  bool     `json:"isLongTerm"`
+	KeepAliveModeRaw            string   `json:"keepAliveModeRaw"`
+	OrderIndex                  int      `json:"orderIndex"`
+	PhoneNumber                 string   `json:"phoneNumber"`
+	Plan                        string   `json:"plan"`
+	Price                       string   `json:"price"`
+	RenewDays                   int      `json:"renewDays"`
+	RenewalIntervalValue        int      `json:"renewalIntervalValue"`
+	RenewalUnit                 string   `json:"renewalUnit"`
+	SecondaryPhoneNumber        string   `json:"secondaryPhoneNumber"`
+	SecondaryPhoneNumberEnabled bool     `json:"secondaryPhoneNumberEnabled"`
+	SMDPAddress                 string   `json:"smdpAddress"`
+	Tags                        []string `json:"tags"`
+	TopUpCycleUnit              string   `json:"topUpCycleUnit"`
+	TransactionNotes            string   `json:"transactionNotes"`
+	UpdatedAt                   string   `json:"updatedAt"`
+	WebsiteURL                  string   `json:"websiteURL"`
+}
+
+// flagEmoji 国家代码 → 旗帜 emoji（SIMHub 导出格式用；应用内展示走 SVG 国旗）。
+func flagEmoji(code string) string {
+	if len(code) != 2 {
+		return ""
+	}
+	rs := make([]rune, 2)
+	for i := 0; i < 2; i++ {
+		c := rune(strings.ToUpper(code)[i])
+		if c < 'A' || c > 'Z' {
+			return ""
+		}
+		rs[i] = rune(0x1F1E6 + int(c-'A'))
+	}
+	return string(rs)
+}
+
+// rfc3339 把库内时间文本转成 RFC3339 UTC（SIMHub 格式）；解析失败返回空串。
+func rfc3339(s string) string {
+	for _, layout := range []string{time.DateTime, dateLayout} {
+		if t, err := time.ParseInLocation(layout, s, time.Local); err == nil {
+			return t.UTC().Format(time.RFC3339)
+		}
+	}
+	return ""
+}
+
+// uuidFromID 由数据库自增 ID 生成稳定的大写 UUID 形态标识
+// （SIMHub 的 id 是字符串；确定性派生保证重复导出内容一致）。
+func uuidFromID(id int64) string {
+	return fmt.Sprintf("00000000-0000-0000-0000-%012X", id)
+}
+
+// smdpFromLPA 从 LPA:1$<smdp>$<matching-id> 提取 SM-DP+ 地址。
+func smdpFromLPA(lpa string) string {
+	parts := strings.Split(lpa, "$")
+	if len(parts) >= 3 && strings.EqualFold(parts[0], "LPA:1") {
+		return parts[1]
+	}
+	return ""
+}
+
+// buildNumbersJSON 把号码列表序列化为 SIMHub 兼容备份（formatVersion 5）：
+// 含 eSIM LPA/确认码，导出文件请妥善保管。副卡多条时合并进单字段（该格式每卡只有一个副卡槽）。
+func buildNumbersJSON(now time.Time, numbers []store.PhoneNumber) ([]byte, error) {
+	cards := make([]numberExport, 0, len(numbers))
+	for i, n := range numbers {
+		tags := []string{"保号卡"}
+		if n.NoKeepalive {
+			tags = []string{"无需保号"}
+		}
+		if n.SimType == "esim" {
+			tags = append(tags, "eSIM")
+		}
+		var secondary []string
+		for _, line := range strings.Split(n.SecondaryNumbers, "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				secondary = append(secondary, line)
+			}
+		}
+		price := ""
+		if n.RechargeAmount > 0 {
+			price = strconv.FormatFloat(n.RechargeAmount, 'f', 2, 64) + " " + n.RechargeCurrency
+		}
+		cards = append(cards, numberExport{
+			ActivationCode:              n.LPAString,
+			Carrier:                     n.Carrier,
+			CarrierAppName:              n.Carrier,
+			ConfirmationCode:            n.ConfirmCode,
+			CountryCode:                 n.CountryCode,
+			CountryName:                 n.CountryName,
+			CreatedAt:                   rfc3339(n.CreatedAt),
+			CurrencyCode:                n.RechargeCurrency,
+			CyclePaymentMinorUnits:      int(n.RechargeAmount*100 + 0.5),
+			ExpiryDate:                  rfc3339(n.ExpiryDate),
+			Flag:                        flagEmoji(n.CountryCode),
+			ID:                          uuidFromID(n.ID),
+			IsLongTerm:                  !n.NoKeepalive,
+			OrderIndex:                  i,
+			PhoneNumber:                 formatPhoneCC(n.CountryCode, n.PhoneNumber),
+			Plan:                        n.PlanName,
+			Price:                       price,
+			RenewDays:                   n.AutoExpiryPeriod,
+			RenewalIntervalValue:        n.AutoExpiryPeriod,
+			RenewalUnit:                 "days",
+			SecondaryPhoneNumber:        strings.Join(secondary, ", "),
+			SecondaryPhoneNumberEnabled: len(secondary) > 0,
+			SMDPAddress:                 smdpFromLPA(n.LPAString),
+			Tags:                        tags,
+			TransactionNotes:            n.Notes,
+			UpdatedAt:                   rfc3339(n.UpdatedAt),
+		})
+	}
+	return json.MarshalIndent(struct {
+		ESIMCards     []numberExport `json:"esimCards"`
+		ExportedAt    string         `json:"exportedAt"`
+		FormatVersion int            `json:"formatVersion"`
+		Services      []any          `json:"services"`
+	}{
+		ESIMCards:     cards,
+		ExportedAt:    now.UTC().Format(time.RFC3339),
+		FormatVersion: 5,
+		Services:      []any{},
+	}, "", "  ")
+}
+
+// HandleAdminExport 导出号码数据：?format=csv（表格用，含 BOM）或
+// ?format=json（完整备份）。
+func (a *App) HandleAdminExport(w http.ResponseWriter, r *http.Request) {
+	u := a.currentUser(r)
+	numbers, _, err := a.Numbers.ListForUser(u.ID, 1, 1000000)
+	if err != nil {
+		http.Error(w, "内部错误", http.StatusInternalServerError)
+		return
+	}
+	now := time.Now()
+	name := "simkeeper-numbers-" + now.Format("20060102")
+	switch r.URL.Query().Get("format") {
+	case "json":
+		b, err := buildNumbersJSON(now, numbers)
+		if err != nil {
+			http.Error(w, "内部错误", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Content-Disposition", "attachment; filename="+name+".json")
+		_, _ = w.Write(b)
+	default: // csv
+		var b strings.Builder
+		// UTF-8 BOM：让 Excel 正确识别中文
+		b.WriteString("\xef\xbb\xbf")
+		b.WriteString("号码,国家代码,国家,运营商,到期日,剩余天数,状态,充值金额,币种\n")
+		for _, n := range numbers {
+			b.WriteString(csvRow(n.PhoneNumber, n.CountryCode, n.CountryName, n.Carrier,
+				n.ExpiryDate, strconv.Itoa(n.DaysLeft(now)), n.Status,
+				strconv.FormatFloat(n.RechargeAmount, 'f', -1, 64), n.RechargeCurrency))
+		}
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", "attachment; filename="+name+".csv")
+		_, _ = w.Write([]byte(b.String()))
+	}
 }
 
 // HandleAdminCron 手动触发一次定时任务（POST + CSRF）。
@@ -308,12 +292,4 @@ func getStr(a *App, key, fallback string) string {
 		return fallback
 	}
 	return v
-}
-
-// boolStr 布尔转 0/1 字符串。
-func boolStr(b bool) string {
-	if b {
-		return "1"
-	}
-	return "0"
 }

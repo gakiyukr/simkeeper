@@ -42,6 +42,10 @@ CREATE TABLE IF NOT EXISTS phone_numbers (
     no_keepalive          TINYINT      NOT NULL DEFAULT 0,
     plan_name             TEXT,
     secondary_numbers     TEXT,
+    device_id             INT UNSIGNED NULL,               -- 安装设备（devices.id，NULL = 未指定）
+    sim_type              VARCHAR(16)  NOT NULL DEFAULT 'physical',
+    lpa_string            TEXT         NULL,               -- eSIM LPA 激活码（enc:v1: 密文）
+    confirm_code          TEXT         NULL,               -- eSIM 确认码（enc:v1: 密文）
     status                VARCHAR(16)  NOT NULL DEFAULT 'active',
     notes                 TEXT         NULL,
     created_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -53,6 +57,20 @@ CREATE TABLE IF NOT EXISTS phone_numbers (
     CONSTRAINT chk_numbers_period CHECK (auto_expiry_period IS NULL OR auto_expiry_period BETWEEN 1 AND 3650),
     CONSTRAINT chk_numbers_status CHECK (status IN ('active', 'inactive')),
     CONSTRAINT fk_numbers_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 设备：eSIM 安装在什么硬件上
+CREATE TABLE IF NOT EXISTS devices (
+    id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id     INT UNSIGNED NOT NULL,
+    name        VARCHAR(100) NOT NULL,
+    device_type VARCHAR(16)  NOT NULL DEFAULT 'phone',
+    notes       TEXT         NULL,
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_devices_user (user_id),
+    CONSTRAINT fk_devices_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 每个用户一行通知渠道配置

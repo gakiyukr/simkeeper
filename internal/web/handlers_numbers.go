@@ -1,6 +1,7 @@
 package web
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -86,6 +87,196 @@ func countryDialByCode(code string) string {
 	return ""
 }
 
+// flagFiles 内嵌旗帜的白名单（小写 ISO 代码 → 存在），路由据此防路径穿越，
+// 模板据此对未知代码退化为不渲染旗帜。
+var flagFiles = map[string]bool{}
+
+func init() {
+	for _, c := range Countries {
+		flagFiles[strings.ToLower(c.Code)] = true
+	}
+}
+
+// phoneGroupRules 常见国家/地区对「去区号后号码本体」的阅读分组（从左按组切；
+// 规则耗尽后仍有剩余：>2 位单独成组、≤2 位并入上一组）。未收录国家按位数兜底。
+var phoneGroupRules = map[string][]int{
+	"CN": {3, 4, 4}, // 138 0013 8000
+	"HK": {4, 4},    // 9123 4567
+	"MO": {4, 4},
+	"TW": {3, 3, 3}, // 912 345 678
+	"JP": {2, 4, 4}, // 90 1234 5678
+	"KR": {2, 4, 4}, // 10 1234 5678
+	"SG": {4, 4},    // 9123 4567
+	"MY": {2, 3, 4}, // 12 345 6789
+	"TH": {2, 3, 4}, // 81 234 5678
+	"VN": {2, 3, 4},
+	"ID": {3, 4},    // 811 1234 567（余数并入尾组）
+	"PH": {3, 3, 4}, // 917 123 4567
+	"IN": {5, 5},    // 91234 56789
+	"KH": {2, 3, 4},
+	"MM": {3, 4},
+	"LA": {2, 3, 4},
+	"MV": {3, 4},
+	"PK": {3, 4},
+	"AE": {2, 3, 4}, // 50 123 4567
+	"SA": {2, 3, 4},
+	"IL": {2, 3, 4},
+	"TR": {3, 3, 2, 2}, // 532 123 45 67
+	"KZ": {3, 3, 2, 2},
+	"RU": {3, 3, 2, 2},
+	"UA": {2, 3, 2, 2},
+	"GB": {4, 6}, // 7123 456789
+	"IE": {2, 3, 4},
+	"FR": {1, 2, 2, 2, 2}, // 6 12 34 56 78
+	"MA": {1, 2, 2, 2, 2},
+	"ES": {3, 3, 3},
+	"PT": {3, 3, 3},
+	"NL": {1, 4, 4}, // 6 1234 5678
+	"BE": {3, 2, 2, 2},
+	"IT": {3, 3, 4},
+	"US": {3, 3, 4}, // 415 555 2671
+	"CA": {3, 3, 4},
+	"MX": {2, 4, 4},
+	"BR": {2, 5, 4}, // 11 91234 5678
+	"CL": {1, 4, 4},
+	"CO": {3, 3, 4},
+	"PE": {3, 3, 3},
+	"AU": {3, 3, 3}, // 412 345 678
+	"NZ": {2, 3, 4},
+	"ZA": {2, 3, 4},
+	"EG": {2, 4, 4},
+	"KE": {3, 3, 3},
+	"NG": {3, 3, 4},
+}
+
+// digitsOnly 提取字符串中的数字。
+func digitsOnly(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// formatPhoneCC 按国家/地区的号码规则插空格便于阅读：完整号码展示为
+// 「+区号 分组本体」；裸号（副卡按原样记录）剥掉重复粘贴的区号后只分组本体。
+// 数字过少或不含数字时原样返回；与所选国家区号不符的完整号码改按前缀推断。
+func formatPhoneCC(cc, number string) string {
+	raw := strings.TrimSpace(number)
+	if raw == "" {
+		return ""
+	}
+	digits := digitsOnly(raw)
+	if len(digits) < 5 {
+		return raw
+	}
+	dial := countryDialByCode(cc)
+	nsn := digits
+	prefix := ""
+	switch {
+	case dial != "" && strings.HasPrefix(digits, dial):
+		nsn = digits[len(dial):]
+		prefix = "+" + dial + " "
+	case dial != "" && strings.HasPrefix(raw, "+"):
+		return formatPhoneAuto(raw)
+	}
+	if len(nsn) < 5 {
+		return raw
+	}
+	return prefix + groupNSN(cc, nsn)
+}
+
+// formatPhoneAuto 无国家码上下文时按号码前缀推断区号再分组
+// （+1/+7 双国共享同一分组规则，前缀推断对分组无歧义）。
+func formatPhoneAuto(number string) string {
+	raw := strings.TrimSpace(number)
+	if !strings.HasPrefix(raw, "+") {
+		return raw
+	}
+	digits := digitsOnly(raw)
+	if len(digits) < 5 {
+		return raw
+	}
+	// digitsOnly 已剥掉 +，剩余即完整号码（区号从首位起匹配）
+	bestDial, bestCC := "", ""
+	for _, c := range Countries {
+		if len(c.Dial) > len(bestDial) && strings.HasPrefix(digits, c.Dial) {
+			bestDial, bestCC = c.Dial, c.Code
+		}
+	}
+	if bestDial == "" {
+		return raw
+	}
+	return "+" + bestDial + " " + groupNSN(bestCC, digits[len(bestDial):])
+}
+
+// groupNSN 对号码本体按规则插空格（pattern 耗尽后的剩余位数：>2 单独成组、
+// ≤2 并入上一组，避免出现孤零零的末位）。
+func groupNSN(cc, nsn string) string {
+	if len(nsn) < 5 {
+		return nsn
+	}
+	pattern, ok := phoneGroupRules[cc]
+	if !ok {
+		pattern = fallbackPattern(len(nsn))
+	}
+	var parts []string
+	rest := nsn
+	for _, g := range pattern {
+		if rest == "" {
+			break
+		}
+		if len(rest) <= g {
+			parts = append(parts, rest)
+			rest = ""
+			break
+		}
+		parts = append(parts, rest[:g])
+		rest = rest[g:]
+	}
+	if rest != "" {
+		if len(rest) <= 2 && len(parts) > 0 {
+			parts[len(parts)-1] += rest
+		} else {
+			parts = append(parts, rest)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+// fallbackPattern 未收录国家按位数兜底：7-12 位用常见惯例，其余 3 位一组、
+// 尾组吞余数（余 1 时并入成组避免 3+…+1 的孤位）。
+func fallbackPattern(n int) []int {
+	switch n {
+	case 7:
+		return []int{3, 4}
+	case 8:
+		return []int{4, 4}
+	case 9:
+		return []int{3, 3, 3}
+	case 10:
+		return []int{3, 3, 4}
+	case 11:
+		return []int{3, 4, 4}
+	case 12:
+		return []int{4, 4, 4}
+	}
+	var p []int
+	for n > 0 {
+		if n > 4 || n == 3 {
+			p = append(p, 3)
+			n -= 3
+		} else {
+			p = append(p, n)
+			n = 0
+		}
+	}
+	return p
+}
+
 // normalizePhone 规范化手机号：去空白与分隔符，缺 + 自动补（与 PHP 版 formatPhoneNumber 一致）。
 func normalizePhone(raw string) string {
 	var b strings.Builder
@@ -105,6 +296,7 @@ func normalizePhone(raw string) string {
 // DashPage 首页数据：统计 + 完整号码管理（分类/搜索/排序/分页）+ 最近通知。
 type DashPage struct {
 	Numbers      []store.PhoneNumber // 当前分类+搜索+排序+分页后的号码
+	DeviceNames  map[int64]string    // 已登记设备（号码表显示安装位置）
 	Total        int                 // 过滤后的号码数（分页用）
 	TotalAll     int                 // 全部号码数（页头展示）
 	Page         int
@@ -117,7 +309,6 @@ type DashPage struct {
 	ActiveCnt    int
 	RecentNotifs []store.Notification
 }
-
 
 // HandleDashboard 首页 = 号码管理主页：统计 + 完整号码管理 + 最近通知。
 // 号码是本程序的核心功能，独立的管理页已并入首页（/numbers 重定向到 /）。
@@ -168,11 +359,17 @@ func (a *App) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 		end = total
 	}
 	recent, _, _ := a.Notify.ListForUser(u.ID, 1, 5)
+	deviceNames := map[int64]string{}
+	if devices, err := a.Devices.ListForUser(u.ID); err == nil {
+		for _, dev := range devices {
+			deviceNames[dev.ID] = dev.Name
+		}
+	}
 	d.Content = DashPage{
 		Numbers: filtered[start:end], Total: total, TotalAll: len(all),
 		Page: pageNum, Pages: pages, Search: q, Cat: cat, Sort: sortKey,
 		Counts: counts, Expiring7: expiring7, ActiveCnt: activeCnt,
-		RecentNotifs: recent,
+		RecentNotifs: recent, DeviceNames: deviceNames,
 	}
 	a.render(w, http.StatusOK, "page_dashboard", d)
 }
@@ -210,8 +407,9 @@ func (a *App) HandleNumbers(w http.ResponseWriter, r *http.Request) {
 }
 
 // filterSortNumbers 纯函数：关键词匹配号码/国家/运营商/备注（不区分大小写），
-// 分类过滤（与 categoryCounts 的优先级口径一致），按到期时间（默认升序）/
-// 降序/最新添加排序；无需保号号码在到期排序中排最后；平局按 ID 保证稳定。
+// 分类过滤（与 categoryCounts 的优先级口径一致）。排序：默认（空）与 carrier
+// 按运营商名称（数字 < 字母 < 其他字符，大写在前；同名按到期日升序、ID 兜底）；
+// 到期时间升序/降序中无需保号号码排最后（其到期日仅作参考）；平局按 ID 保证稳定。
 func filterSortNumbers(all []store.PhoneNumber, q, cat, sortKey string) []store.PhoneNumber {
 	q = strings.ToLower(strings.TrimSpace(q))
 	now := time.Now()
@@ -261,6 +459,8 @@ func filterSortNumbers(all []store.PhoneNumber, q, cat, sortKey string) []store.
 	}
 	var less func(i, j int) bool
 	switch sortKey {
+	case "expiry_asc":
+		less = byExpiry(false)
 	case "expiry_desc":
 		less = byExpiry(true)
 	case "created_desc":
@@ -270,11 +470,64 @@ func filterSortNumbers(all []store.PhoneNumber, q, cat, sortKey string) []store.
 			}
 			return out[i].ID > out[j].ID
 		}
-	default: // expiry_asc
-		less = byExpiry(false)
+	default: // 空值与 "carrier"：首页默认按运营商名称排序
+		less = func(i, j int) bool {
+			if c := carrierCompare(out[i].Carrier, out[j].Carrier); c != 0 {
+				return c < 0
+			}
+			// 同名运营商：到期日升序，再按 ID 保证稳定
+			if out[i].ExpiryDate != out[j].ExpiryDate {
+				return out[i].ExpiryDate < out[j].ExpiryDate
+			}
+			return out[i].ID < out[j].ID
+		}
 	}
 	sort.Slice(out, less)
 	return out
+}
+
+// charRank 运营商排序的字符类别：数字 0 < 拉丁字母 1 < 其他字符 2（如中文）。
+func charRank(r rune) int {
+	switch {
+	case r >= '0' && r <= '9':
+		return 0
+	case (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z'):
+		return 1
+	default:
+		return 2
+	}
+}
+
+// carrierCompare 运营商名称排序比较。逐字符比较：类别 数字 < 字母 < 其他字符；
+// 字母忽略大小写、平局时大写在前（码点序天然满足 'A' < 'a'）；
+// 数字与其他字符按码点。空名称排最后（历史数据允许留空）。返回 -1/0/1。
+func carrierCompare(a, b string) int {
+	ra, rb := []rune(a), []rune(b)
+	if len(ra) == 0 || len(rb) == 0 {
+		switch {
+		case len(ra) == len(rb):
+			return 0
+		case len(ra) == 0:
+			return 1
+		default:
+			return -1
+		}
+	}
+	for i := 0; i < min(len(ra), len(rb)); i++ {
+		x, y := ra[i], rb[i]
+		if cx, cy := charRank(x), charRank(y); cx != cy {
+			return cmp.Compare(cx, cy)
+		}
+		if charRank(x) == 1 {
+			if lx, ly := unicode.ToLower(x), unicode.ToLower(y); lx != ly {
+				return cmp.Compare(lx, ly)
+			}
+		}
+		if x != y {
+			return cmp.Compare(x, y)
+		}
+	}
+	return cmp.Compare(len(ra), len(rb))
 }
 
 // HandleNumberNew 新增号码表单。
@@ -285,7 +538,8 @@ func (a *App) HandleNumberNew(w http.ResponseWriter, r *http.Request) {
 		a.saveNumberForm(w, r, u.ID, nil, &d)
 		return
 	}
-	d.Content = map[string]any{"Countries": Countries, "Carriers": Carriers, "Country": ""}
+	devices, _ := a.Devices.ListForUser(u.ID)
+	d.Content = map[string]any{"Countries": Countries, "Carriers": Carriers, "Devices": devices, "Country": ""}
 	a.render(w, http.StatusOK, "page_number_form", d)
 }
 
@@ -304,8 +558,9 @@ func (a *App) HandleNumberEdit(w http.ResponseWriter, r *http.Request) {
 		a.saveNumberForm(w, r, u.ID, number, &d)
 		return
 	}
+	devices, _ := a.Devices.ListForUser(u.ID)
 	d.Content = map[string]any{
-		"Countries": Countries, "Carriers": Carriers, "N": number, "Country": number.CountryCode,
+		"Countries": Countries, "Carriers": Carriers, "Devices": devices, "N": number, "Country": number.CountryCode,
 	}
 	a.render(w, http.StatusOK, "page_number_form", d)
 }
@@ -366,6 +621,28 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	}
 	autoEnabled := !noKeepalive
 
+	// 号码类型：physical 实体卡 / esim。eSIM 才保留激活信息（LPA 激活码 +
+	// 确认码）；LPA 来自扫码复制的整串文本，去掉混入的空白再校验格式。
+	simType := "physical"
+	if r.PostFormValue("sim_type") == "esim" {
+		simType = "esim"
+	}
+	lpa := strings.Join(strings.Fields(r.PostFormValue("lpa_string")), "")
+	confirmCode := strings.TrimSpace(r.PostFormValue("confirm_code"))
+	if simType != "esim" {
+		lpa, confirmCode = "", ""
+	}
+	// 安装设备：可选；归属校验失败或未选则视为未指定
+	deviceID := int64(0)
+	if v := r.PostFormValue("device_id"); v != "" {
+		if id64, perr := strconv.ParseInt(v, 10, 64); perr == nil {
+			if _, derr := a.Devices.ByID(id64, userID); derr == nil {
+				deviceID = id64
+			}
+		}
+	}
+	devices, _ := a.Devices.ListForUser(userID)
+
 	// 校验失败回显用：以本次提交值构造实体——报错后表单不清空；
 	// 编辑模式下沿用原 ID（模板据 ID 区分编辑/新增）且回显用户改过的值而非库里旧值。
 	submitted := &store.PhoneNumber{
@@ -376,11 +653,12 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		AutoExpiryEnabled: autoEnabled, AutoStartDate: autoStart,
 		AutoExpiryPeriod: autoPeriod, Status: status, Notes: notes,
 		NoKeepalive: noKeepalive, PlanName: planName, SecondaryNumbers: secondary,
+		SimType: simType, LPAString: lpa, ConfirmCode: confirmCode, DeviceID: deviceID,
 	}
 	if existing != nil {
 		submitted.ID = existing.ID
 	}
-	form := map[string]any{"Countries": Countries, "Carriers": Carriers, "N": submitted, "Country": countryCode}
+	form := map[string]any{"Countries": Countries, "Carriers": Carriers, "Devices": devices, "N": submitted, "Country": countryCode}
 	fail := func(msg string) {
 		d.Flash, d.FlashIsErr = msg, true
 		d.Content = form
@@ -394,6 +672,18 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		return
 	case countryName == "":
 		fail("请选择国家/地区")
+		return
+	case carrier == "":
+		fail("请填写运营商")
+		return
+	case simType == "esim" && lpa != "" && !strings.HasPrefix(strings.ToUpper(lpa), "LPA:"):
+		fail("LPA 激活码应以 LPA:1$ 开头（运营商下载二维码里的整串文本）")
+		return
+	case simType == "esim" && len(lpa) > 2000:
+		fail("LPA 激活码过长")
+		return
+	case len(confirmCode) > 200:
+		fail("确认码过长")
 		return
 	}
 
@@ -435,6 +725,7 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		AutoExpiryEnabled: autoEnabled, AutoStartDate: autoStart,
 		AutoExpiryPeriod: autoPeriod, Status: status, Notes: notes,
 		NoKeepalive: noKeepalive, PlanName: planName, SecondaryNumbers: secondary,
+		SimType: simType, LPAString: lpa, ConfirmCode: confirmCode, DeviceID: deviceID,
 	}
 	if autoEnabled {
 		n.AutoCalculatedExpiry = expiry
@@ -451,12 +742,6 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		}
 		a.setFlash(w, "号码已更新", false)
 	} else {
-		// 上限校验只在新增时做
-		maxNumbers := a.Settings.GetInt("max_numbers_per_user", 50)
-		if cnt, err := a.Numbers.CountForUser(userID); err == nil && cnt >= maxNumbers {
-			fail("每个用户最多可添加 " + strconv.Itoa(maxNumbers) + " 个号码")
-			return
-		}
 		if cnt, err := a.Numbers.CountDuplicate(userID, phone, 0); err == nil && cnt > 0 {
 			fail("该号码已存在于你的列表中")
 			return
@@ -470,10 +755,14 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	http.Redirect(w, r, "/numbers", http.StatusSeeOther)
 }
 
-// HandleNumberRenew 标记已续费：这是周期号码唯一的滚动机制——
-// 未过期时按原到期日锚定顺延一个周期（提前续费不吃亏），
-// 已过期则从今天起算（复活）；周期起点同步更新为新周期的开始。
-// GET 访问直接回列表。
+// HandleNumberRenew 手动保号（周期号码唯一的滚动机制），新到期日两种算法：
+//
+//	today  从今天重新起算——按活跃间隔计费的运营商（如 giffgaff）：今天 + 周期；
+//	extend 在原到期日上顺延——有效期叠加的运营商（如 AIS）：原到期日 + 周期，
+//	       顺延结果仍早于今天（过期太久）时拒绝，提示改用重起算。
+//
+// 兼容未带 mode 的旧提交：未过期锚定原到期日、已过期从今天起算（原行为）。
+// 周期起点同步更新为新周期的开始。GET 访问直接回列表。
 func (a *App) HandleNumberRenew(w http.ResponseWriter, r *http.Request) {
 	u := a.currentUser(r)
 	back := func(msg string, isErr bool) {
@@ -494,13 +783,33 @@ func (a *App) HandleNumberRenew(w http.ResponseWriter, r *http.Request) {
 		back("该号码未设置续费周期，请先编辑补填", true)
 		return
 	}
+	mode := r.PostFormValue("mode")
 	today := time.Now()
-	anchor := today
-	if t, err := time.ParseInLocation(dateLayout, n.ExpiryDate, time.Local); err == nil && t.After(today) {
-		anchor = t // 未过期：锚定原到期日，周期首尾相接
+	var anchor time.Time
+	switch mode {
+	case "today":
+		anchor = today
+	case "extend":
+		// 原到期日无效时按今天起算兜底
+		if t, err := time.ParseInLocation(dateLayout, n.ExpiryDate, time.Local); err == nil {
+			anchor = t
+		} else {
+			anchor = today
+		}
+	default: // 兼容旧提交：未过期锚定原到期日、已过期从今天起算
+		anchor = today
+		if t, err := time.ParseInLocation(dateLayout, n.ExpiryDate, time.Local); err == nil && t.After(today) {
+			anchor = t
+		}
+	}
+	newExpiry := anchor.AddDate(0, 0, n.AutoExpiryPeriod).Format(dateLayout)
+	if mode == "extend" {
+		if t, err := time.ParseInLocation(dateLayout, newExpiry, time.Local); err != nil || !t.After(today) {
+			back("在原到期日上顺延仍早于今天（号码已过期太久），请改用「从今天重新起算」", true)
+			return
+		}
 	}
 	newStart := anchor.Format(dateLayout)
-	newExpiry := anchor.AddDate(0, 0, n.AutoExpiryPeriod).Format(dateLayout)
 	if _, err := a.Numbers.MarkRenewed(n.ID, u.ID, newExpiry, newStart); err != nil {
 		back("操作失败", true)
 		return
@@ -596,34 +905,17 @@ func daysBadge(days int) string {
 	}
 }
 
-// HandleHistoryExport 导出用户号码 CSV。
-func (a *App) HandleHistoryExport(w http.ResponseWriter, r *http.Request) {
-	u := a.currentUser(r)
-	numbers, _, err := a.Numbers.ListForUser(u.ID, 1, 100000)
-	if err != nil {
-		http.Error(w, "内部错误", http.StatusInternalServerError)
-		return
-	}
-	var b strings.Builder
-	// UTF-8 BOM：让 Excel 正确识别中文
-	b.WriteString("\xef\xbb\xbf")
-	b.WriteString("号码,国家代码,国家,运营商,到期日,剩余天数,状态,充值金额,币种\n")
-	for _, n := range numbers {
-		b.WriteString(csvRow(n.PhoneNumber, n.CountryCode, n.CountryName, n.Carrier,
-			n.ExpiryDate, strconv.Itoa(n.DaysLeft(time.Now())), n.Status,
-			strconv.FormatFloat(n.RechargeAmount, 'f', -1, 64), n.RechargeCurrency))
-	}
-	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-	w.Header().Set("Content-Disposition", "attachment; filename=numbers.csv")
-	_, _ = w.Write([]byte(b.String()))
-}
-
-// csvRow 拼 CSV 行并转义含逗号/引号的字段。
+// csvRow 拼 CSV 行并转义：含逗号/引号的字段加引号包裹；以 = + - @ 开头的
+// 字段前置单引号，防止 Excel/LibreOffice 把单元格当公式执行（公式注入）。
+// 号码列普遍以 + 开头，前置 ' 后 Excel 会按文本展示、加号不再被吃掉。
 func csvRow(fields ...string) string {
 	out := make([]string, len(fields))
 	for i, f := range fields {
 		if strings.ContainsAny(f, ",\"\n") {
 			f = `"` + strings.ReplaceAll(f, `"`, `""`) + `"`
+		}
+		if len(f) > 0 && (f[0] == '=' || f[0] == '+' || f[0] == '-' || f[0] == '@') {
+			f = "'" + f
 		}
 		out[i] = f
 	}
@@ -654,6 +946,8 @@ var funcMap = template.FuncMap{
 		}
 		return string(runes[:42]) + "…"
 	},
+	// deviceTypeText 设备类型展示名（设备管理页）。
+	"deviceTypeText": deviceTypeText,
 	"statusText": func(s string) string {
 		if s == "inactive" {
 			return "已终止"
@@ -761,16 +1055,43 @@ var funcMap = template.FuncMap{
 		}
 		return template.URL(b.String())
 	},
-	// secondaryLines 把副卡存储文本（每行一个）拆成列表。
-	"secondaryLines": func(s string) []string {
+	// secondaryLines 把副卡存储文本（每行一个）拆成列表，并按主号国家的
+	// 号码规则分组展示；非数字内容原样保留。
+	"secondaryLines": func(n store.PhoneNumber) []string {
 		var out []string
-		for _, line := range strings.Split(s, "\n") {
+		for _, line := range strings.Split(n.SecondaryNumbers, "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				out = append(out, formatPhoneCC(n.CountryCode, line))
+			}
+		}
+		return out
+	},
+	// secondaryRaw 副卡编辑回显用：拆原始行，不做任何格式化
+	//（副卡按原样记录，展示层才分组）。
+	"secondaryRaw": func(n store.PhoneNumber) []string {
+		var out []string
+		for _, line := range strings.Split(n.SecondaryNumbers, "\n") {
 			if line = strings.TrimSpace(line); line != "" {
 				out = append(out, line)
 			}
 		}
 		return out
 	},
+	// todayPlus / expiryPlus 手动保号对话框里的两个候选到期日。
+	"todayPlus": func(days int) string {
+		return time.Now().AddDate(0, 0, days).Format(dateLayout)
+	},
+	"expiryPlus": func(n store.PhoneNumber) string {
+		t, err := time.ParseInLocation(dateLayout, n.ExpiryDate, time.Local)
+		if err != nil {
+			return ""
+		}
+		return t.AddDate(0, 0, n.AutoExpiryPeriod).Format(dateLayout)
+	},
+	// fmtPhone / phoneFmt 号码阅读分组：前者按号码的国家代码，后者按号码
+	// 前缀推断区号（通知历史里只有号码字符串时用）。
+	"fmtPhone": formatPhoneCC,
+	"phoneFmt": formatPhoneAuto,
 	// phoneNational 编辑回显：完整号码去掉 +区号，得到号码本体。
 	"phoneNational": func(n store.PhoneNumber) string {
 		return strings.TrimPrefix(n.PhoneNumber, "+"+countryDialByCode(n.CountryCode))
@@ -782,6 +1103,17 @@ var funcMap = template.FuncMap{
 	},
 	"countryName": countryNameByCode,
 	"countryDial": countryDialByCode,
+	// flagHTML 国旗小图（内嵌 SVG）。不用 Unicode 旗帜 emoji：Windows 浏览器
+	// 没有旗帜字形，会退化成 "JP" 字母。名称取自固定的 Countries 表，非用户输入。
+	// 未知代码返回空串，单元格自然退化为仅运营商文字。
+	"flagHTML": func(code string) template.HTML {
+		lower := strings.ToLower(code)
+		if !flagFiles[lower] {
+			return ""
+		}
+		name := countryNameByCode(code)
+		return template.HTML(`<img class="flag" src="/flags/` + lower + `.svg" alt="` + name + `" title="` + name + `">`)
+	},
 	// firstRune 取用户名首字符（按 rune），用作侧边栏头像字母。
 	"firstRune": func(s string) string {
 		for _, r := range strings.TrimSpace(s) {

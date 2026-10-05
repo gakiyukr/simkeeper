@@ -6,3 +6,8 @@ import "embed"
 //
 //go:embed templates/*.html
 var tmplFS embed.FS
+
+// flagFS 内嵌国旗 SVG（来源与扩充方式见 flags/README.md）。
+//
+//go:embed flags/*.svg
+var flagFS embed.FS

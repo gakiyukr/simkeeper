@@ -7,14 +7,14 @@ import (
 	"simkeeper/internal/auth"
 )
 
-// HandleSetup 初始化管理员。
-// 仅当系统里一个用户都没有时可用——等价于 PHP 版安装向导的「创建管理员」步骤；
-// 一旦存在任何账号，本入口永久失效（返回 404），不能被用来接管运行中的系统。
+// HandleSetup 初始化账号（单账号系统）。
+// 仅当系统里一个账号都没有时可用；一旦存在账号，本入口永久失效（返回 404），
+// 不能被用来接管运行中的系统。
 func (a *App) HandleSetup(w http.ResponseWriter, r *http.Request) {
-	d := a.baseData(r, "初始化管理员")
+	d := a.baseData(r, "初始化账号")
 
-	_, total, err := a.Users.List(1, 1, "")
-	if err != nil {
+	var total int
+	if err := a.DB.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&total); err != nil {
 		http.Error(w, "内部错误", http.StatusInternalServerError)
 		return
 	}
@@ -50,7 +50,7 @@ func (a *App) HandleSetup(w http.ResponseWriter, r *http.Request) {
 			if _, err := a.Users.Create(username, email, hash, "admin"); err != nil {
 				d.Flash, d.FlashIsErr = "创建失败（用户名或邮箱可能已被占用）", true
 			} else {
-				a.setFlash(w, "管理员已创建，请登录", false)
+				a.setFlash(w, "账号已创建，请登录", false)
 				http.Redirect(w, r, "/login", http.StatusSeeOther)
 				return
 			}

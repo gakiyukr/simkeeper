@@ -18,6 +18,9 @@ func (a *App) Routes() http.Handler {
 	// ---- 未登录可达 ----
 	mux.HandleFunc("GET /login", a.handleLoginPage)
 	mux.Handle("POST /login", a.csrfProtect(a.HandleLogin))
+	// 国旗 SVG：公开静态资源（代码按白名单校验），无需登录。
+	// ServeMux 通配符必须独占整段，.svg 后缀在处理器里剥离校验。
+	mux.HandleFunc("GET /flags/{code}", a.handleFlagSVG)
 	mux.Handle("POST /login/totp", a.ensureSessionMW(a.csrfProtect(a.HandleLoginTOTP)))
 	mux.Handle("POST /logout", a.csrfProtect(a.HandleLogout))
 	mux.HandleFunc("GET /setup", a.handleSetupPage)
@@ -32,7 +35,9 @@ func (a *App) Routes() http.Handler {
 	mux.Handle("GET /numbers", http.HandlerFunc(a.HandleNumbers)) // 已并入首页，永久重定向
 	mux.Handle("GET /numbers/new", a.requireLogin(a.HandleNumberNew))
 	mux.Handle("POST /numbers/new", a.requireLogin(a.csrfProtect(a.HandleNumberNew)))
-	mux.Handle("GET /numbers/export", a.requireLogin(a.HandleHistoryExport))
+	mux.Handle("GET /numbers/export", a.requireLogin(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/admin/export?format=csv", http.StatusMovedPermanently)
+	}))
 	mux.Handle("GET /numbers/{id}/edit", a.requireLogin(a.HandleNumberEdit))
 	mux.Handle("POST /numbers/{id}/edit", a.requireLogin(a.csrfProtect(a.HandleNumberEdit)))
 	mux.Handle("POST /numbers/{id}/renew", a.requireLogin(a.csrfProtect(a.HandleNumberRenew)))
@@ -46,17 +51,22 @@ func (a *App) Routes() http.Handler {
 	mux.Handle("GET /profile", a.requireLogin(a.HandleProfile))
 	mux.Handle("POST /profile", a.requireLogin(a.csrfProtect(a.HandleProfile)))
 
-	// ---- 管理端 ----
-	mux.Handle("GET /admin", a.requireAdmin(a.HandleAdminHome))
-	mux.Handle("POST /admin/cron", a.requireAdmin(a.csrfProtect(a.HandleAdminCron)))
-	mux.Handle("GET /admin/users", a.requireAdmin(a.HandleAdminUsers))
-	mux.Handle("POST /admin/users", a.requireAdmin(a.csrfProtect(a.HandleAdminUsers)))
-	mux.Handle("GET /admin/numbers", a.requireAdmin(a.HandleAdminNumbers))
-	mux.Handle("GET /admin/export", a.requireAdmin(a.HandleAdminExport))
-	mux.Handle("GET /admin/settings", a.requireAdmin(a.HandleAdminSettings))
-	mux.Handle("POST /admin/settings", a.requireAdmin(a.csrfProtect(a.HandleAdminSettings)))
+	// ---- 设备管理 ----
+	mux.Handle("GET /devices", a.requireLogin(a.HandleDevices))
+	mux.Handle("POST /devices", a.requireLogin(a.csrfProtect(a.HandleDevices)))
+	mux.Handle("POST /devices/{id}/edit", a.requireLogin(a.csrfProtect(a.HandleDeviceEdit)))
+	mux.Handle("POST /devices/{id}/delete", a.requireLogin(a.csrfProtect(a.HandleDeviceDelete)))
 
-	return a.sessionMiddleware(mux)
+	// ---- 系统（单账号，登录即可管理）：后台与系统设置合并在 /admin ----
+	mux.Handle("GET /admin", a.requireLogin(a.HandleAdminHome))
+	mux.Handle("POST /admin/cron", a.requireLogin(a.csrfProtect(a.HandleAdminCron)))
+	mux.Handle("GET /admin/export", a.requireLogin(a.HandleAdminExport))
+	mux.Handle("GET /admin/settings", a.requireLogin(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/admin", http.StatusMovedPermanently)
+	}))
+	mux.Handle("POST /admin/settings", a.requireLogin(a.csrfProtect(a.HandleAdminSettings)))
+
+	return a.secureHeaders(a.sessionMiddleware(mux))
 }
 
 // ensureSession 保证请求有会话可承载 CSRF 令牌：没有就建一条匿名预会话并种 Cookie。

@@ -1,11 +1,6 @@
 {{define "page_login"}}{{template "authhead" .}}
 <div class="tabs">
   <input type="radio" name="authtab" id="tab-login" checked>
-  {{if .AllowReg}}<input type="radio" name="authtab" id="tab-reg">{{end}}
-  {{if .AllowReg}}<div class="tab-list">
-    <label for="tab-login">登录</label>
-    <label for="tab-reg">注册</label>
-  </div>{{end}}
   <div class="tab-panels">
     <section class="tab-panel p-login">
       <div class="card">
@@ -31,41 +26,6 @@
       <p class="auth-foot"><a href="/forgot">忘记密码？</a></p>
     </section>
 
-    {{if .AllowReg}}
-    <section class="tab-panel p-reg">
-      <div class="card">
-        <div class="card-header">
-          <h1 class="card-title">创建账号</h1>
-          <p class="card-desc">注册后即可添加号码并接收到期提醒</p>
-        </div>
-        <div class="card-content">
-          <form method="post" action="/login">
-            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-            <input type="hidden" name="register" value="1">
-            <div class="field" style="margin-bottom:1rem">
-              <label class="label" for="r-username">用户名</label>
-              <input class="input" type="text" id="r-username" name="reg_username" required>
-              <p class="hint">中英文、数字、下划线、连字符</p>
-            </div>
-            <div class="field" style="margin-bottom:1rem">
-              <label class="label" for="r-email">邮箱</label>
-              <input class="input" type="email" id="r-email" name="reg_email" required>
-            </div>
-            <div class="field" style="margin-bottom:1rem">
-              <label class="label" for="r-password">密码</label>
-              <input class="input" type="password" id="r-password" name="reg_password" required>
-              <p class="hint">至少 8 位</p>
-            </div>
-            <div class="field" style="margin-bottom:1.25rem">
-              <label class="label" for="r-confirm">确认密码</label>
-              <input class="input" type="password" id="r-confirm" name="reg_confirm_password" required>
-            </div>
-            <button type="submit" class="btn btn-outline" style="width:100%">注册</button>
-          </form>
-        </div>
-      </div>
-    </section>
-    {{end}}
   </div>
 </div>
 {{template "authfoot" .}}{{end}}

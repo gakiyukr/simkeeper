@@ -39,6 +39,10 @@ CREATE TABLE IF NOT EXISTS phone_numbers (
     no_keepalive          INT    NOT NULL DEFAULT 0,    -- 无需保号：不参与到期提醒
     plan_name             TEXT,                          -- 方案信息：套餐名称
     secondary_numbers     TEXT,                          -- 副卡号码，每行一个
+    device_id             BIGINT,                        -- 安装设备（devices.id，NULL = 未指定）
+    sim_type              TEXT   NOT NULL DEFAULT 'physical' CHECK (sim_type IN ('physical', 'esim')),
+    lpa_string            TEXT,                          -- eSIM LPA 激活码（enc:v1: 密文）
+    confirm_code          TEXT,                          -- eSIM 确认码（enc:v1: 密文）
     status                TEXT   NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
     notes                 TEXT,
     created_at            TEXT   NOT NULL DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'),
@@ -47,6 +51,18 @@ CREATE TABLE IF NOT EXISTS phone_numbers (
 CREATE INDEX IF NOT EXISTS idx_numbers_user   ON phone_numbers(user_id);
 CREATE INDEX IF NOT EXISTS idx_numbers_expiry ON phone_numbers(expiry_date);
 CREATE INDEX IF NOT EXISTS idx_numbers_status ON phone_numbers(status);
+
+-- 设备：eSIM 安装在什么硬件上
+CREATE TABLE IF NOT EXISTS devices (
+    id          BIGSERIAL PRIMARY KEY,
+    user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name        TEXT   NOT NULL,
+    device_type TEXT   NOT NULL DEFAULT 'phone',
+    notes       TEXT,
+    created_at  TEXT   NOT NULL DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'),
+    updated_at  TEXT   NOT NULL DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
+);
+CREATE INDEX IF NOT EXISTS idx_devices_user ON devices(user_id);
 
 -- 每个用户一行通知渠道配置
 CREATE TABLE IF NOT EXISTS notification_configs (

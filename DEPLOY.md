@@ -92,6 +92,24 @@ server {
 
 所有命令行参数都有环境变量等价（`SK_TRUST_PROXY` / `SK_SECURE_COOKIES` / `SK_ADDR` / `SK_CRON_INTERVAL` / `SK_DRIVER` / `SK_DB` / `SK_DSN`），想在 systemd 里统一用环境变量也可以（`Environment=` 行），两种写法等价。
 
+## 5.1 零信任前置：Cloudflare Tunnel + Access（可选，推荐公网部署）
+
+程序自身的登录（密码 + 可选 TOTP）、CSRF、登录限流已覆盖常规场景；若希望互联网上根本摸不到源站，套一层 Cloudflare Tunnel + Access 是最省心的方案——不开公网端口，访问策略（邮箱验证 / SSO / 设备校验）由 Cloudflare 强制，程序自己的登录退化为第二层。
+
+```bash
+cloudflared tunnel create simkeeper
+cloudflared tunnel route dns simkeeper sim.example.com
+cloudflared tunnel run --url http://127.0.0.1:8080 simkeeper   # 建议注册成 systemd 服务
+```
+
+在 Cloudflare Zero Trust 控制台给该域名配置 Access 策略。程序侧三件事：
+
+- `-addr 127.0.0.1:8080`（默认即是）：源站只听回环，Tunnel 之外没有入口。
+- `-secure-cookies` 必开：TLS 在 Cloudflare 边缘终结，程序看到的是 HTTP。
+- `-trust-proxy` 开启后登录限流按 `X-Forwarded-For` 最右值取 IP——cloudflared 追加的那一跳就是真实访客。
+
+第 5 节的 Caddy 与 Tunnel 二选一。若担心 Access 策略被误关，可在应用侧校验 `Cf-Access-Jwt-Assertion` 请求头（未实现，属进阶选项）。用 Tailscale/WireGuard 内网直连的部署同理，不需要本节。
+
 ## 6. 数据库选择
 
 - 默认 SQLite（零配置）。备份 = 备份 `/var/lib/simkeeper/simkeeper.db` 一个文件（WAL 模式下用 `sqlite3 simkeeper.db ".backup '/backup/simkeeper.db'"` 更安全）。
@@ -110,6 +128,15 @@ sudo systemctl restart simkeeper
 ```
 
 schema 迁移在启动时自动执行（幂等，含老库补列），无需手工干预。降级前先看 release 说明是否含不兼容迁移。
+
+## 8.1 忘记密码
+
+- 首选：登录页「忘记密码？」走邮件自助找回（需要账号的邮件渠道已配置并能收信）。
+- 渠道不可用时的兜底：在服务器上以服务账号运行重置命令，生成一次性临时密码（输出仅此一次，登录后在「个人设置」改成自己的密码；该账号全部会话随即失效）：
+
+```bash
+sudo -u simkeeper /opt/simkeeper/simkeeper reset-password -db /var/lib/simkeeper/simkeeper.db
+```
 
 ## 9. 安全清单
 

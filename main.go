@@ -13,6 +13,7 @@ package main
 import (
 	"bufio"
 	"context"
+	crand "crypto/rand"
 	"encoding/base64"
 	"errors"
 	"flag"
@@ -27,6 +28,7 @@ import (
 	"syscall"
 	"time"
 
+	"simkeeper/internal/auth"
 	"simkeeper/internal/cronjob"
 	"simkeeper/internal/db"
 	"simkeeper/internal/secret"
@@ -43,6 +45,13 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "tg-login" {
 		os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
 		tgLogin(os.Args)
+		return
+	}
+
+	// reset-password 子命令：重置账号密码（邮件找回渠道不可用时的兜底）。
+	if len(os.Args) > 1 && os.Args[1] == "reset-password" {
+		os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
+		resetPassword(os.Args)
 		return
 	}
 
@@ -129,8 +138,9 @@ func run(driver, dbPath, dsn, addr string, trustProxy, secureCookies bool, secre
 		log.Printf("[main] 已加密 %d 行渠道凭据", n)
 	}
 
-	if _, total, err := app.Users.List(1, 1, ""); err == nil && total == 0 {
-		log.Printf("[main] 系统还没有账号：请访问 http://%s/setup 创建管理员（创建后入口自动关闭）", addr)
+	var userCount int
+	if err := app.DB.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&userCount); err == nil && userCount == 0 {
+		log.Printf("[main] 系统还没有账号：请访问 http://%s/setup 创建账号（创建后入口自动关闭）", addr)
 	}
 
 	// 定时任务与 HTTP 服务共用生命周期
@@ -180,7 +190,9 @@ func tgLogin(args []string) {
 		user   = fs.String("username", "", "要登录哪个用户的 TG 电话渠道（登录页用的用户名）")
 		keyFlg = fs.String("secret-key-file", envOr("SK_SECRET_KEY_FILE", ""), "凭据加密密钥文件")
 	)
-	_ = fs.Parse(args)
+	// args[0] 是程序路径（非 flag），必须跳过，否则解析在首个元素就停止、
+	// 全部 flag 落回默认值
+	_ = fs.Parse(args[1:])
 	if *user == "" {
 		fmt.Fprintln(os.Stderr, "用法: simkeeper tg-login -username <用户名>")
 		os.Exit(2)
@@ -270,4 +282,115 @@ func durationOr(key string, fallback time.Duration) time.Duration {
 		return d
 	}
 	return fallback
+}
+
+// resetPassword 重置账号密码：生成一次性临时密码并打印（仅此一次），
+// 重置后该账号的全部登录会话立即失效。单账号自救路径——邮件找回渠道
+// 不可用时的兜底。用法：
+//
+//	simkeeper reset-password [-clear-totp] [-username 用户名] [-driver ... -db/-dsn ...]
+//
+// -clear-totp 同时清除两步验证绑定（验证器丢失时使用，之后在个人设置重新绑定）。
+// 单账号系统省略 -username 即自动定位唯一账号（历史多账号库需指定）。
+func resetPassword(args []string) {
+	fs := flag.NewFlagSet("reset-password", flag.ExitOnError)
+	var (
+		driver    = fs.String("driver", envOr("SK_DRIVER", db.DialectSQLite), "数据库驱动")
+		dbPath    = fs.String("db", envOr("SK_DB", "data/simkeeper.db"), "SQLite 数据库路径")
+		dsn       = fs.String("dsn", envOr("SK_DSN", ""), "MySQL/PostgreSQL 连接串")
+		user      = fs.String("username", "", "要重置的账号用户名（单账号系统可省略）")
+		clearTOTP = fs.Bool("clear-totp", false, "同时关闭该账号的两步验证（验证器丢失时使用）")
+	)
+	// args[0] 是程序路径（非 flag），必须跳过，否则解析在首个元素就停止、
+	// 全部 flag 落回默认值
+	_ = fs.Parse(args[1:])
+
+	if *driver == db.DialectSQLite {
+		if dir := filepath.Dir(*dbPath); dir != "" && dir != "." {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				log.Fatalf("[reset-password] 创建数据目录失败: %v", err)
+			}
+		}
+	}
+
+	database, err := db.Open(*driver, pickDSN(*driver, *dbPath, *dsn))
+	if err != nil {
+		log.Fatalf("[reset-password] %v", err)
+	}
+	defer database.Close()
+	if err := database.Migrate(); err != nil {
+		log.Fatalf("[reset-password] %v", err)
+	}
+
+	users := &store.UserRepo{DB: database}
+	var target *store.User
+	if *user != "" {
+		target, err = users.ByUsername(*user)
+		if err != nil {
+			log.Fatalf("[reset-password] 找不到用户 %q", *user)
+		}
+	} else {
+		// 未指定用户名：系统应只有唯一账号（历史多账号库要求显式指定）
+		var candidates []store.User
+		rows, qerr := database.Query(`SELECT id, username FROM users ORDER BY id`)
+		if qerr != nil {
+			log.Fatalf("[reset-password] %v", qerr)
+		}
+		for rows.Next() {
+			var u store.User
+			if err := rows.Scan(&u.ID, &u.Username); err != nil {
+				log.Fatalf("[reset-password] %v", err)
+			}
+			candidates = append(candidates, u)
+		}
+		_ = rows.Close()
+		switch {
+		case len(candidates) == 0:
+			log.Fatalf("[reset-password] 系统还没有任何账号，请先访问 /setup 创建")
+		case len(candidates) > 1:
+			log.Fatalf("[reset-password] 系统中有 %d 个账号（历史数据），请用 -username 指定要重置的账号", len(candidates))
+		}
+		target = &candidates[0]
+	}
+
+	fmt.Printf("将重置账号 %q 的登录密码，该账号的所有登录会话将立即失效", target.Username)
+	if *clearTOTP {
+		fmt.Print("，并关闭其两步验证（验证器需重新绑定）")
+	}
+	fmt.Print("。继续？(y/N) ")
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	if strings.TrimSpace(strings.ToLower(line)) != "y" {
+		fmt.Println("已取消")
+		return
+	}
+
+	// 一次性临时密码：去掉易混淆字符（0/O、1/l/I），仅本次打印
+	const charset = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
+	raw := make([]byte, 12)
+	if _, err := crand.Read(raw); err != nil {
+		log.Fatalf("[reset-password] 生成临时密码失败: %v", err)
+	}
+	for i := range raw {
+		raw[i] = charset[int(raw[i])%len(charset)]
+	}
+	hash, err := auth.HashPassword(string(raw))
+	if err != nil {
+		log.Fatalf("[reset-password] %v", err)
+	}
+	if err := users.UpdatePassword(target.ID, hash); err != nil {
+		log.Fatalf("[reset-password] 重置失败: %v", err)
+	}
+	if *clearTOTP {
+		if err := users.SetTOTP(target.ID, "", false); err != nil {
+			log.Fatalf("[reset-password] 清除两步验证失败: %v", err)
+		}
+	}
+	if err := (&auth.SessionStore{DB: database}).DestroyForUser(target.ID); err != nil {
+		log.Printf("[reset-password] 撤销会话失败（密码仍已重置）: %v", err)
+	}
+	fmt.Printf("已重置 %q 的密码，临时密码：%s\n", target.Username, string(raw))
+	if *clearTOTP {
+		fmt.Println("已同时关闭两步验证，登录后可在「个人设置」重新绑定。")
+	}
+	fmt.Println("请立即用临时密码登录，并在「个人设置」里改成自己的密码（此密码不会再次显示）。")
 }

@@ -73,7 +73,7 @@ func (r *UserRepo) PasswordHashByID(id int64) (string, error) {
 	return hash, err
 }
 
-// Create 新建用户（注册与初始化管理员共用）。密码哈希在调用前生成。
+// Create 新建账号，仅由 /setup 在系统零账号时调用（单账号系统）。密码哈希在调用前生成。
 func (r *UserRepo) Create(username, email, passwordHash, role string) (int64, error) {
 	return r.DB.InsertID(
 		`INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, ?, ?)`,
@@ -96,26 +96,6 @@ func (r *UserRepo) UpdateEmail(id int64, email string) error {
 		`UPDATE users SET email = ?, updated_at = ? WHERE id = ?`,
 		email, db.Touch(time.Now()), id,
 	)
-	return err
-}
-
-// SetStatus 启用/禁用/封禁。
-func (r *UserRepo) SetStatus(id int64, status string) error {
-	_, err := r.DB.Exec(`UPDATE users SET status = ?, updated_at = ? WHERE id = ?`,
-		status, db.Touch(time.Now()), id)
-	return err
-}
-
-// SetRole 调整角色。
-func (r *UserRepo) SetRole(id int64, role string) error {
-	_, err := r.DB.Exec(`UPDATE users SET role = ?, updated_at = ? WHERE id = ?`,
-		role, db.Touch(time.Now()), id)
-	return err
-}
-
-// Delete 删除用户；号码与通知记录由外键级联清理。
-func (r *UserRepo) Delete(id int64) error {
-	_, err := r.DB.Exec(`DELETE FROM users WHERE id = ?`, id)
 	return err
 }
 
@@ -150,16 +130,6 @@ func (r *UserRepo) SetTOTP(id int64, totpSecret string, enabled bool) error {
 	return err
 }
 
-// CountAdmins 统计 active 管理员数量。
-// 后台封禁/删除管理员的操作必须先经此校验，避免删光管理员把自己锁死。
-func (r *UserRepo) CountAdmins() (int, error) {
-	var n int
-	err := r.DB.QueryRow(
-		`SELECT COUNT(*) FROM users WHERE role = 'admin' AND status = 'active'`,
-	).Scan(&n)
-	return n, err
-}
-
 // Authenticate 登录校验：查用户、比对哈希、检查状态。
 // 返回 (用户, 是否成功)；不区分「用户不存在」与「密码错误」。
 // 用户不存在时仍执行一次假哈希比对，避免时序侧信道暴露用户名。
@@ -182,44 +152,4 @@ func (r *UserRepo) Authenticate(username, password string) (*User, bool, error) 
 		return nil, false, nil
 	}
 	return u, true, nil
-}
-
-// List 分页列出用户，支持按用户名/邮箱模糊搜索。
-// LIKE 一律套 LOWER()：三种方言的大小写敏感行为不同，lower 后行为一致。
-func (r *UserRepo) List(page, limit int, search string) ([]User, int, error) {
-	where := ``
-	args := []any{}
-	if search != "" {
-		where = ` WHERE LOWER(username) LIKE LOWER(?) OR LOWER(email) LIKE LOWER(?)`
-		like := `%` + search + `%`
-		args = append(args, like, like)
-	}
-	var total int
-	if err := r.DB.QueryRow(`SELECT COUNT(*) FROM users`+where, args...).Scan(&total); err != nil {
-		return nil, 0, err
-	}
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 {
-		limit = 20
-	}
-	offset := (page - 1) * limit
-	rows, err := r.DB.Query(
-		`SELECT `+userCols+` FROM users`+where+` ORDER BY id DESC LIMIT ? OFFSET ?`,
-		append(args, limit, offset)...,
-	)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer rows.Close()
-	var users []User
-	for rows.Next() {
-		var u User
-		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.Role, &u.Status, &u.CreatedAt); err != nil {
-			return nil, 0, err
-		}
-		users = append(users, u)
-	}
-	return users, total, rows.Err()
 }

@@ -2,10 +2,12 @@
 {{$N := .Content.N}}
 {{$mode := "keep"}}
 {{if $N}}{{if $N.NoKeepalive}}{{$mode = "none"}}{{end}}{{end}}
+{{$sim := "physical"}}
+{{if $N}}{{if eq $N.SimType "esim"}}{{$sim = "esim"}}{{end}}{{end}}
 <div class="page-head">
   <div>
     <h1 class="page-title">{{if and $N $N.ID}}编辑号码{{else}}添加号码{{end}}</h1>
-    <p class="page-desc">{{if and $N $N.ID}}{{$N.PhoneNumber}}{{else}}填写号码信息与提醒规则{{end}}</p>
+    <p class="page-desc">{{if and $N $N.ID}}{{fmtPhone $N.CountryCode $N.PhoneNumber}}{{else}}填写号码信息与提醒规则{{end}}</p>
   </div>
 </div>
 
@@ -30,8 +32,16 @@
         </div>
         <div class="field">
           <label class="label" for="n-carrier">运营商</label>
-          <input class="input" type="text" id="n-carrier" name="carrier" value="{{with $N}}{{.Carrier}}{{end}}">
+          <input class="input" type="text" id="n-carrier" name="carrier" value="{{with $N}}{{.Carrier}}{{end}}" required>
           <p class="hint">自行填写运营商名称</p>
+        </div>
+        <div class="field">
+          <label class="label" for="n-device">安装设备</label>
+          <select class="select" id="n-device" name="device_id">
+            <option value="">未指定</option>
+            {{range .Content.Devices}}<option value="{{.ID}}" {{if $N}}{{if eq $N.DeviceID .ID}}selected{{end}}{{end}}>{{.Name}}</option>{{end}}
+          </select>
+          <p class="hint">这条 eSIM 装在哪个设备；设备在「设备管理」维护</p>
         </div>
       </div>
 
@@ -73,7 +83,7 @@
           </div>
         </div>
         <div id="secondary-rows">
-          {{with .Content.N}}{{range secondaryLines .SecondaryNumbers}}
+          {{with .Content.N}}{{range secondaryRaw .}}
           <div class="phone-row">
             <input class="input" type="text" name="secondary" value="{{.}}" placeholder="副卡号码（按原样记录，不带区号）">
             <button type="button" class="btn btn-sm btn-ghost row-remove" title="删除此副卡">移除</button>
@@ -149,20 +159,55 @@
         <p class="hint" id="expiry-preview" style="margin-top:.9rem"></p>
       </div>
 
-      {{if and $N $N.ID}}
-      <div class="sec">
-        <h3 class="sec-title">状态</h3>
-        <p class="sec-sub">终止后仅作记录、不再提醒，可随时撤销恢复为使用中</p>
-        <div class="form-grid">
-          <div class="field">
-            <select class="select" name="status">
-              <option value="active" {{if ne $N.Status "inactive"}}selected{{end}}>使用中</option>
-              <option value="inactive" {{if eq $N.Status "inactive"}}selected{{end}}>已终止</option>
-            </select>
+      <details class="more-settings" {{if $N}}{{if eq $sim "esim"}}open{{end}}{{end}}>
+        <summary>更多设置<span class="more-hint">号码类型 / eSIM 激活信息 / 状态</span></summary>
+        <div class="more-body">
+          <div class="form-grid">
+            <div class="field">
+              <label class="label">号码类型</label>
+              <div class="mode-row" id="sim-types" style="margin-bottom:0">
+                <label class="mode-item">
+                  <input type="radio" name="sim_type" value="physical" {{if ne $sim "esim"}}checked{{end}}>
+                  <span class="mode-card"><b>实体卡</b><small>普通实体 SIM 卡</small></span>
+                </label>
+                <label class="mode-item">
+                  <input type="radio" name="sim_type" value="esim" {{if eq $sim "esim"}}checked{{end}}>
+                  <span class="mode-card"><b>eSIM</b><small>嵌入式 SIM，可保存下载激活信息</small></span>
+                </label>
+              </div>
+            </div>
           </div>
+          <div id="esim-fields" hidden>
+            <h4 class="esim-title">eSIM 启用信息</h4>
+            <div class="form-grid">
+              <div class="field span2">
+                <label class="label" for="n-lpa">LPA 激活码</label>
+                <input class="input" type="text" id="n-lpa" name="lpa_string" spellcheck="false" autocomplete="off"
+                       placeholder="LPA:1$rsp.example.com$XXXX-XXXX" value="{{with $N}}{{.LPAString}}{{end}}">
+                <p class="hint">扫码得到的一整串 LPA:1$…；换设备重新下载配置时需要。保存后加密存储，仅登录可见</p>
+              </div>
+              <div class="field">
+                <label class="label" for="n-confirm">确认码（Confirmation Code）</label>
+                <input class="input" type="text" id="n-confirm" name="confirm_code" autocomplete="off"
+                       value="{{with $N}}{{.ConfirmCode}}{{end}}">
+                <p class="hint">部分 eSIM 下载时需额外输入；没有就留空</p>
+              </div>
+            </div>
+          </div>
+          {{if and $N $N.ID}}
+          <div class="form-grid" style="margin-top:1.1rem">
+            <div class="field">
+              <label class="label" for="n-status">状态</label>
+              <select class="select" id="n-status" name="status">
+                <option value="active" {{if ne $N.Status "inactive"}}selected{{end}}>使用中</option>
+                <option value="inactive" {{if eq $N.Status "inactive"}}selected{{end}}>已终止</option>
+              </select>
+              <p class="hint">终止后仅作记录、不再提醒，可随时撤销恢复为使用中</p>
+            </div>
+          </div>
+          {{end}}
         </div>
-      </div>
-      {{end}}
+      </details>
     </div>
     <div class="card-footer">
       <a class="btn btn-ghost" href="/numbers">取消</a>
@@ -302,6 +347,20 @@ const SK_COUNTRIES = {{countryJSON .Content.Countries}};
   [expiry, period].forEach(function (el) {
     el.addEventListener('change', function () { markChips(); preview(); });
     el.addEventListener('input', function () { markChips(); preview(); });
+  });
+  refresh();
+})();
+(function () {
+  const fields = document.getElementById('esim-fields');
+  function currentSim() {
+    const r = document.querySelector('input[name="sim_type"]:checked');
+    return r ? r.value : 'physical';
+  }
+  function refresh() {
+    fields.hidden = currentSim() !== 'esim';
+  }
+  document.querySelectorAll('input[name="sim_type"]').forEach(function (r) {
+    r.addEventListener('change', refresh);
   });
   refresh();
 })();

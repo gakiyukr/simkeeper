@@ -20,9 +20,7 @@ var DefaultSettings = []struct {
 }{
 	{"site_name", "SimKeeper", "站点名称"},
 	{"site_description", "eSIM / 手机号保号到期提醒系统", "站点描述"},
-	{"max_numbers_per_user", "50", "每个用户最多可添加的号码数"},
 	{"log_retention_days", "90", "通知记录保留天数"},
-	{"allow_registration", "1", "是否允许新用户注册"},
 	{"last_cron_run", "", "定时任务最后执行时间"},
 	{"total_sent", "0", "累计发送通知数"},
 }

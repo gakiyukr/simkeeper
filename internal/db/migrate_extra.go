@@ -39,6 +39,10 @@ var phoneNumberColumns = []ColumnSpec{
 	{Name: "no_keepalive", SQLiteType: "INTEGER NOT NULL DEFAULT 0", MySQLType: "TINYINT NOT NULL DEFAULT 0", PGType: "INT NOT NULL DEFAULT 0"},
 	{Name: "plan_name", SQLiteType: "TEXT", MySQLType: "TEXT", PGType: "TEXT"},
 	{Name: "secondary_numbers", SQLiteType: "TEXT", MySQLType: "TEXT", PGType: "TEXT"},
+	{Name: "sim_type", SQLiteType: "TEXT NOT NULL DEFAULT 'physical'", MySQLType: "VARCHAR(16) NOT NULL DEFAULT 'physical'", PGType: "TEXT NOT NULL DEFAULT 'physical'"},
+	{Name: "lpa_string", SQLiteType: "TEXT", MySQLType: "TEXT", PGType: "TEXT"},
+	{Name: "confirm_code", SQLiteType: "TEXT", MySQLType: "TEXT", PGType: "TEXT"},
+	{Name: "device_id", SQLiteType: "INTEGER", MySQLType: "INT UNSIGNED", PGType: "BIGINT"},
 }
 
 // notificationColumns notifications 表的历史演进列。
