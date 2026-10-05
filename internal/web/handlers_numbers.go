@@ -348,22 +348,12 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	if status != "inactive" {
 		status = "active"
 	}
-	// 保号方式三选一：cycle 周期自动续期 / date 到期提醒（手动）/ none 无需保号。
-	// 旧表单未携带 keepalive_mode 时按自动续期开关推导，保持兼容。
+	// 保号方式二选一：keep 需要周期性保号 / none 无需保号。
+	// 周期自动计算只是「需要保号」内部的到期日录入方式（开关 auto_expiry_enabled），
+	// 不构成独立的保号方式——无论充值还是使用一次都需要人工操作。
 	mode := r.PostFormValue("keepalive_mode")
-	autoEnabled := false
-	noKeepalive := false
-	switch mode {
-	case "cycle":
-		autoEnabled = true
-	case "none":
-		noKeepalive = true
-	default:
-		mode = "date"
-		if r.PostFormValue("auto_expiry_enabled") == "1" {
-			mode, autoEnabled = "cycle", true
-		}
-	}
+	noKeepalive := mode == "none"
+	autoEnabled := !noKeepalive && r.PostFormValue("auto_expiry_enabled") == "1"
 	autoStart := strings.TrimSpace(r.PostFormValue("auto_start_date"))
 	autoPeriod := atoiDefault(r.PostFormValue("auto_expiry_period"), 0)
 	if noKeepalive {
