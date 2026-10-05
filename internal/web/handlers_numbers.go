@@ -91,18 +91,23 @@ func normalizePhone(raw string) string {
 	return s
 }
 
-// DashPage 首页仪表盘数据。
+// DashPage 首页仪表盘数据：三类号码标签页 + 统计 + 最近通知。
 type DashPage struct {
-	Upcoming     []store.PhoneNumber // 即将到期摘要：活跃号码按到期日升序前 N 个
-	More         int                 // 未在摘要中展示的活跃号码数
-	Total        int
-	Expiring7    int // 7 天内到期（含今天）
-	ActiveCnt    int
-	SiteDesc     string
+	Upcoming    []store.PhoneNumber // 需要周期性保号：活跃号码按到期日升序前 N 个
+	More        int                 // 未展示的周期保号号码数
+	NoneList    []store.PhoneNumber // 无需保号列表（最新添加在前）
+	NoneMore    int
+	ExpiredList []store.PhoneNumber // 已过期列表（最近过期在前）
+	ExpiredMore int
+	Counts      CategoryCounts
+	Total       int
+	Expiring7   int // 7 天内到期（含今天）
+	ActiveCnt   int
+	SiteDesc    string
 	RecentNotifs []store.Notification
 }
 
-// dashUpcomingLimit 概览页即将到期摘要的最大条数；完整管理在号码管理页。
+// dashUpcomingLimit 概览页每个号码标签页的最大条数；完整管理在号码管理页。
 const dashUpcomingLimit = 5
 
 // HandleDashboard 首页：概览 + 即将到期摘要。
@@ -116,29 +121,45 @@ func (a *App) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "内部错误", http.StatusInternalServerError)
 		return
 	}
-	page := DashPage{Total: len(numbers)}
 	today := time.Now()
-	active := make([]store.PhoneNumber, 0, len(numbers))
+	page := DashPage{Total: len(numbers), Counts: categoryCounts(numbers, today)}
+	keepAll := make([]store.PhoneNumber, 0, len(numbers))
 	for i := range numbers {
-		if numbers[i].NoKeepalive {
-			continue // 无需保号：不进到期统计与摘要
+		n := numbers[i]
+		switch {
+		case n.NoKeepalive:
+			page.NoneList = append(page.NoneList, n)
+			continue
+		case n.DaysLeft(today) < 0:
+			page.ExpiredList = append(page.ExpiredList, n)
+			continue
 		}
-		days := numbers[i].DaysLeft(today)
-		if days >= 0 && days <= 7 {
+		if n.DaysLeft(today) <= 7 {
 			page.Expiring7++
 		}
-		if numbers[i].Status == "active" {
+		if n.Status == "active" {
 			page.ActiveCnt++
-			active = append(active, numbers[i])
+			keepAll = append(keepAll, n)
 		}
 	}
 	// YYYY-MM-DD 文本可直接字典序排序
-	sort.Slice(active, func(i, j int) bool { return active[i].ExpiryDate < active[j].ExpiryDate })
-	if len(active) > dashUpcomingLimit {
-		page.More = len(active) - dashUpcomingLimit
-		active = active[:dashUpcomingLimit]
+	sort.Slice(keepAll, func(i, j int) bool { return keepAll[i].ExpiryDate < keepAll[j].ExpiryDate })
+	if len(keepAll) > dashUpcomingLimit {
+		page.More = len(keepAll) - dashUpcomingLimit
+		keepAll = keepAll[:dashUpcomingLimit]
 	}
-	page.Upcoming = active
+	page.Upcoming = keepAll
+	// 无需保号：最新添加在前；已过期：最近过期在前
+	sort.Slice(page.NoneList, func(i, j int) bool { return page.NoneList[i].ID > page.NoneList[j].ID })
+	sort.Slice(page.ExpiredList, func(i, j int) bool { return page.ExpiredList[i].ExpiryDate > page.ExpiredList[j].ExpiryDate })
+	if len(page.NoneList) > dashUpcomingLimit {
+		page.NoneMore = len(page.NoneList) - dashUpcomingLimit
+		page.NoneList = page.NoneList[:dashUpcomingLimit]
+	}
+	if len(page.ExpiredList) > dashUpcomingLimit {
+		page.ExpiredMore = len(page.ExpiredList) - dashUpcomingLimit
+		page.ExpiredList = page.ExpiredList[:dashUpcomingLimit]
+	}
 	page.SiteDesc, _ = a.Settings.Get("site_description")
 	page.RecentNotifs, _, _ = a.Notify.ListForUser(u.ID, 1, 5)
 	d.Content = page
