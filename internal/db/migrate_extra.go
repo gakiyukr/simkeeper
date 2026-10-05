@@ -37,6 +37,8 @@ var notificationConfigColumns = []ColumnSpec{
 // phoneNumberColumns phone_numbers 表的历史演进列。
 var phoneNumberColumns = []ColumnSpec{
 	{Name: "no_keepalive", SQLiteType: "INTEGER NOT NULL DEFAULT 0", MySQLType: "TINYINT NOT NULL DEFAULT 0", PGType: "INT NOT NULL DEFAULT 0"},
+	{Name: "plan_name", SQLiteType: "TEXT", MySQLType: "TEXT", PGType: "TEXT"},
+	{Name: "secondary_numbers", SQLiteType: "TEXT", MySQLType: "TEXT", PGType: "TEXT"},
 }
 
 // notificationColumns notifications 表的历史演进列。
@@ -231,6 +233,8 @@ func (d *DB) relaxPeriodCheckSQLite() error {
     auto_expiry_period    INTEGER CHECK (auto_expiry_period IS NULL OR auto_expiry_period BETWEEN 1 AND 3650),
     auto_calculated_expiry TEXT,
     no_keepalive          INTEGER NOT NULL DEFAULT 0,
+    plan_name             TEXT,
+    secondary_numbers     TEXT,
     status                TEXT    NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
     notes                 TEXT,
     created_at            TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
@@ -289,7 +293,8 @@ func (d *DB) relaxPeriodCheckSQLite() error {
 	for _, name := range []string{"id", "user_id", "phone_number", "country_code", "country_name", "carrier",
 		"expiry_date", "recharge_amount", "recharge_currency", "renewal_days_before", "usage_days_before",
 		"auto_expiry_enabled", "auto_start_date", "auto_expiry_period", "auto_calculated_expiry",
-		"status", "notes", "created_at", "updated_at", "no_keepalive"} {
+		"status", "notes", "created_at", "updated_at", "no_keepalive",
+		"plan_name", "secondary_numbers"} {
 		if newCols[name] && oldCols[name] {
 			cols = append(cols, name)
 		}

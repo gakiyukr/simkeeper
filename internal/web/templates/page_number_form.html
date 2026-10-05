@@ -19,42 +19,73 @@
     <div class="card-content">
       <div class="form-grid">
         <div class="field">
-          <label class="label" for="n-phone">手机号码</label>
-          <input class="input" type="text" id="n-phone" name="phone_number" placeholder="+8613800138000"
-                 value="{{with $N}}{{.PhoneNumber}}{{end}}" required>
-          <p class="hint">含国际区号，自动补 +</p>
-        </div>
-        <div class="field">
-          <label class="label" for="n-country">国家 / 地区</label>
+          <label class="label" for="n-country">国家与地区</label>
           <div class="combo">
-            <input class="input" type="text" id="n-country" placeholder="搜索名称或代码…" autocomplete="off"
-                   value="{{if $.Content.Country}}{{countryName $.Content.Country}}（{{$.Content.Country}}）{{end}}" required>
+            <input class="input" type="text" id="n-country" placeholder="输入 +86、CN 或 中文名搜索" autocomplete="off"
+                   value="{{if $.Content.Country}}{{countryName $.Content.Country}}（{{$.Content.Country}} +{{countryDial $.Content.Country}}）{{end}}" required>
             <input type="hidden" name="country_code" id="n-country-code" value="{{$.Content.Country}}">
             <div class="combo-list" id="n-country-list" hidden></div>
           </div>
-          <p class="hint">支持按中文名称或国家代码搜索</p>
+          <p class="hint">支持区号（+86）、国家代码（CN）或中文名称搜索</p>
         </div>
         <div class="field">
           <label class="label" for="n-carrier">运营商</label>
-          <input class="input" type="text" id="n-carrier" name="carrier" list="carrier-list" value="{{with $N}}{{.Carrier}}{{end}}">
-          <p class="hint">可选，从候选选择或直接输入</p>
-          <datalist id="carrier-list">
-            {{range .Content.Carriers}}<option value="{{.}}">{{end}}
-          </datalist>
+          <input class="input" type="text" id="n-carrier" name="carrier" value="{{with $N}}{{.Carrier}}{{end}}">
+          <p class="hint">自行填写运营商名称</p>
         </div>
+      </div>
+
+      <div class="sec">
+        <h3 class="sec-title">方案信息</h3>
+        <p class="sec-sub">套餐名称与价格（可选，便于回顾当时办的是什么套餐）</p>
+        <div class="form-grid">
+          <div class="field span2">
+            <label class="label" for="n-plan">套餐名称</label>
+            <input class="input" type="text" id="n-plan" name="plan_name" placeholder="例如：30 天不限流量方案"
+                   value="{{with $N}}{{.PlanName}}{{end}}">
+          </div>
+          <div class="field">
+            <label class="label" for="n-amount">套餐价格</label>
+            <input class="input" type="number" step="0.01" min="0" id="n-amount" name="recharge_amount"
+                   value="{{with $N}}{{if gt .RechargeAmount 0.0}}{{.RechargeAmount}}{{end}}{{end}}">
+          </div>
+          <div class="field">
+            <label class="label" for="n-currency">币种</label>
+            <input class="input" type="text" id="n-currency" name="recharge_currency" maxlength="8"
+                   value="{{with $N}}{{.RechargeCurrency}}{{else}}USD{{end}}">
+          </div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h3 class="sec-title">电话号码</h3>
+        <p class="sec-sub">主号自动带上所选国家的区号；副卡按原样记录，可添加多个</p>
+        <div class="form-grid">
+          <div class="field span2">
+            <label class="label" for="n-phone">主号号码</label>
+            <div class="phone-group">
+              <span class="phone-dial" id="dial-prefix">+{{countryDial $.Content.Country}}</span>
+              <input class="input" type="text" id="n-phone" name="phone_national" autocomplete="off"
+                     placeholder="{{if $.Content.Country}}输入号码本体{{else}}先选择国家与地区{{end}}"
+                     value="{{with $N}}{{phoneNational .}}{{end}}" required>
+            </div>
+            <p class="hint" id="phone-hint">区号随国家与地区自动带入，只需填写号码本体</p>
+          </div>
+        </div>
+        <div id="secondary-rows">
+          {{with .Content.N}}{{range secondaryLines .SecondaryNumbers}}
+          <div class="phone-row">
+            <input class="input" type="text" name="secondary" value="{{.}}" placeholder="副卡号码（按原样记录，不带区号）">
+            <button type="button" class="btn btn-sm btn-ghost row-remove" title="删除此副卡">移除</button>
+          </div>
+          {{end}}{{end}}
+        </div>
+        <button type="button" class="btn btn-sm btn-outline" id="add-secondary" style="margin-top:.6rem">{{template "ico_plus"}}添加副卡</button>
+      </div>
+
+      <div class="sec">
+        <h3 class="sec-title">备注</h3>
         <div class="field">
-          <label class="label" for="n-amount">建议充值金额</label>
-          <input class="input" type="number" step="0.01" min="0" id="n-amount" name="recharge_amount"
-                 value="{{with $N}}{{if gt .RechargeAmount 0.0}}{{.RechargeAmount}}{{end}}{{end}}">
-          <p class="hint">可选</p>
-        </div>
-        <div class="field">
-          <label class="label" for="n-currency">币种</label>
-          <input class="input" type="text" id="n-currency" name="recharge_currency" maxlength="8"
-                 value="{{with $N}}{{.RechargeCurrency}}{{else}}USD{{end}}">
-        </div>
-        <div class="field span2">
-          <label class="label" for="n-notes">备注</label>
           <textarea class="textarea" id="n-notes" name="notes">{{with $N}}{{.Notes}}{{end}}</textarea>
           <p class="hint">可选</p>
         </div>
@@ -144,32 +175,45 @@
 const SK_COUNTRIES = {{countryJSON .Content.Countries}};
 (function () {
   const disp = document.getElementById('n-country'), code = document.getElementById('n-country-code'),
-        list = document.getElementById('n-country-list');
+        list = document.getElementById('n-country-list'), prefix = document.getElementById('dial-prefix'),
+        phone = document.getElementById('n-phone'), hint = document.getElementById('phone-hint');
   function pick(cd) {
     const c = SK_COUNTRIES.find(function (x) { return x.Code === cd; });
     if (!c) return;
     code.value = cd;
-    disp.value = c.Name + '（' + c.Code + '）';
+    disp.value = c.Name + '（' + c.Code + ' +' + c.Dial + '）';
+    prefix.textContent = '+' + c.Dial;
+    phone.placeholder = '输入号码本体（不含区号）';
     list.hidden = true;
   }
   function render(q) {
     q = (q || '').trim().toLowerCase();
     list.innerHTML = '';
     const items = SK_COUNTRIES.filter(function (c) {
-      return !q || c.Name.toLowerCase().indexOf(q) >= 0 || c.Code.toLowerCase().indexOf(q) >= 0;
+      return !q || c.Name.toLowerCase().indexOf(q) >= 0 ||
+             c.Code.toLowerCase().indexOf(q) >= 0 ||
+             ('+' + c.Dial).indexOf(q.replace(/^\+/, '+')) >= 0 ||
+             c.Dial.indexOf(q.replace(/\+/g, '')) >= 0;
     });
     items.forEach(function (c) {
       const d = document.createElement('div');
       d.className = 'combo-item';
       d.dataset.code = c.Code;
-      d.textContent = c.Name + '（' + c.Code + '）';
+      d.textContent = c.Name + '（' + c.Code + ' +' + c.Dial + '）';
       d.addEventListener('mousedown', function (ev) { ev.preventDefault(); pick(c.Code); });
       list.appendChild(d);
     });
     list.hidden = items.length === 0;
   }
   disp.addEventListener('focus', function () { render(''); });
-  disp.addEventListener('input', function () { code.value = ''; render(disp.value); });
+  disp.addEventListener('input', function () {
+    code.value = '';
+    if (disp.value.indexOf('+') === 0 || disp.value.length <= 3) {
+      // 输入区号/短代码时即时提示，但不自动锁定国家——必须从列表中选择
+      prefix.textContent = '+';
+    }
+    render(disp.value);
+  });
   disp.addEventListener('blur', function () { setTimeout(function () { list.hidden = true; }, 120); });
   disp.addEventListener('keydown', function (e) {
     const cur = list.querySelectorAll('.combo-item');
@@ -186,6 +230,30 @@ const SK_COUNTRIES = {{countryJSON .Content.Countries}};
     } else if (e.key === 'Escape') { list.hidden = true; }
   });
   if (code.value) pick(code.value);
+})();
+
+(function () {
+  const rows = document.getElementById('secondary-rows');
+  document.getElementById('add-secondary').addEventListener('click', function () {
+    const row = document.createElement('div');
+    row.className = 'phone-row';
+    const input = document.createElement('input');
+    input.className = 'input';
+    input.name = 'secondary';
+    input.placeholder = '副卡号码（按原样记录，不带区号）';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm btn-ghost row-remove';
+    btn.textContent = '移除';
+    row.appendChild(input);
+    row.appendChild(btn);
+    rows.appendChild(row);
+  });
+  rows.addEventListener('click', function (e) {
+    if (e.target.classList.contains('row-remove')) {
+      e.target.closest('.phone-row').remove();
+    }
+  });
 })();
 
 (function () {

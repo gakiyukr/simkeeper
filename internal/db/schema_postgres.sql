@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS phone_numbers (
     auto_expiry_period    INT    CHECK (auto_expiry_period IS NULL OR auto_expiry_period BETWEEN 1 AND 3650),
     auto_calculated_expiry TEXT,                         -- 最近一次自动计算出的到期日
     no_keepalive          INT    NOT NULL DEFAULT 0,    -- 无需保号：不参与到期提醒
+    plan_name             TEXT,                          -- 方案信息：套餐名称
+    secondary_numbers     TEXT,                          -- 副卡号码，每行一个
     status                TEXT   NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
     notes                 TEXT,
     created_at            TEXT   NOT NULL DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'),

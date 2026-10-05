@@ -27,7 +27,9 @@ type PhoneNumber struct {
 	Status               string
 	Notes                string
 	CreatedAt            string
-	NoKeepalive          bool // 无需保号：不参与到期提醒与周期滚动
+	NoKeepalive          bool   // 无需保号：不参与到期提醒与周期滚动
+	PlanName             string // 方案信息：套餐名称（如 30 天不限流量）
+	SecondaryNumbers     string // 副卡号码，每行一个（仅作记录，不带区号）
 }
 
 // NumberRepo 号码数据访问。
@@ -38,7 +40,7 @@ type NumberRepo struct {
 const numberCols = `id, user_id, phone_number, country_code, country_name, carrier, expiry_date,
 	recharge_amount, recharge_currency, renewal_days_before, usage_days_before,
 	auto_expiry_enabled, auto_start_date, auto_expiry_period, auto_calculated_expiry,
-	status, notes, created_at, no_keepalive`
+	status, notes, created_at, no_keepalive, plan_name, secondary_numbers`
 
 func scanNumber(scan interface{ Scan(...any) error }) (*PhoneNumber, error) {
 	var n PhoneNumber
@@ -46,11 +48,12 @@ func scanNumber(scan interface{ Scan(...any) error }) (*PhoneNumber, error) {
 	var amount sql.NullFloat64
 	var period sql.NullInt64
 	var noKeepalive int
+	var planName, secondary sql.NullString
 	err := scan.Scan(&n.ID, &n.UserID, &n.PhoneNumber, &n.CountryCode, &n.CountryName,
 		&carrier, &n.ExpiryDate, &amount, &n.RechargeCurrency,
 		&n.RenewalDaysBefore, &n.UsageDaysBefore,
 		&n.AutoExpiryEnabled, &autoStart, &period, &autoCalc,
-		&n.Status, &notes, &n.CreatedAt, &noKeepalive)
+		&n.Status, &notes, &n.CreatedAt, &noKeepalive, &planName, &secondary)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -68,6 +71,8 @@ func scanNumber(scan interface{ Scan(...any) error }) (*PhoneNumber, error) {
 		n.AutoExpiryPeriod = int(period.Int64)
 	}
 	n.NoKeepalive = noKeepalive == 1
+	n.PlanName = planName.String
+	n.SecondaryNumbers = secondary.String
 	return &n, nil
 }
 
@@ -89,12 +94,13 @@ func (r *NumberRepo) Create(n *PhoneNumber) (int64, error) {
 		 (user_id, phone_number, country_code, country_name, carrier, expiry_date,
 		  recharge_amount, recharge_currency, renewal_days_before, usage_days_before,
 		  auto_expiry_enabled, auto_start_date, auto_expiry_period, auto_calculated_expiry,
-		  no_keepalive, status, notes)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		  no_keepalive, plan_name, secondary_numbers, status, notes)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		n.UserID, n.PhoneNumber, n.CountryCode, n.CountryName, nullStr(n.Carrier), n.ExpiryDate,
 		nullFloat(n.RechargeAmount), n.RechargeCurrency, n.RenewalDaysBefore, n.UsageDaysBefore,
 		boolInt(n.AutoExpiryEnabled), nullStr(n.AutoStartDate), nullInt(n.AutoExpiryPeriod),
-		nullStr(n.AutoCalculatedExpiry), boolInt(n.NoKeepalive), n.Status, nullStr(n.Notes),
+		nullStr(n.AutoCalculatedExpiry), boolInt(n.NoKeepalive),
+		nullStr(n.PlanName), nullStr(n.SecondaryNumbers), n.Status, nullStr(n.Notes),
 	)
 }
 
@@ -105,12 +111,13 @@ func (r *NumberRepo) Update(n *PhoneNumber) error {
 		 phone_number=?, country_code=?, country_name=?, carrier=?, expiry_date=?,
 		 recharge_amount=?, recharge_currency=?, renewal_days_before=?, usage_days_before=?,
 		 auto_expiry_enabled=?, auto_start_date=?, auto_expiry_period=?, auto_calculated_expiry=?,
-		 no_keepalive=?, status=?, notes=?, updated_at=?
+		 no_keepalive=?, plan_name=?, secondary_numbers=?, status=?, notes=?, updated_at=?
 		 WHERE id=? AND user_id=?`,
 		n.PhoneNumber, n.CountryCode, n.CountryName, nullStr(n.Carrier), n.ExpiryDate,
 		nullFloat(n.RechargeAmount), n.RechargeCurrency, n.RenewalDaysBefore, n.UsageDaysBefore,
 		boolInt(n.AutoExpiryEnabled), nullStr(n.AutoStartDate), nullInt(n.AutoExpiryPeriod),
-		nullStr(n.AutoCalculatedExpiry), boolInt(n.NoKeepalive), n.Status, nullStr(n.Notes),
+		nullStr(n.AutoCalculatedExpiry), boolInt(n.NoKeepalive),
+		nullStr(n.PlanName), nullStr(n.SecondaryNumbers), n.Status, nullStr(n.Notes),
 		db.Touch(time.Now()), n.ID, n.UserID,
 	)
 	return err

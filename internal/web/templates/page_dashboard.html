@@ -47,7 +47,10 @@
         <tbody>
           {{range .Content.Numbers}}
           <tr>
-            <td><span class="mono-strong phone-val">{{.PhoneNumber}}</span></td>
+            <td>
+              <span class="mono-strong phone-val">{{.PhoneNumber}}</span>
+              {{range secondaryLines .SecondaryNumbers}}<br><small class="muted phone-val" title="副卡">副 {{.}}</small>{{end}}
+            </td>
             <td>{{.CountryName}}{{if .Carrier}}<br><small class="muted">{{.Carrier}}</small>{{end}}</td>
             <td>
               {{if .NoKeepalive}}<span class="muted">—</span>{{else}}{{.ExpiryDate}}{{if gt (cycleProgress .) -1}}

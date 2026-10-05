@@ -372,6 +372,13 @@ pre.msg{background:var(--muted);border-radius:calc(var(--radius) - 2px);padding:
 .mode-item input:checked+.mode-card{border-color:var(--foreground);background:var(--accent)}
 .mode-item input:focus-visible+.mode-card{box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 25%,transparent)}
 @media(max-width:720px){.mode-row{grid-template-columns:1fr}}
+/* 电话号码：区号前缀 + 本体；副卡行 */
+.phone-group{display:flex}
+.phone-dial{display:inline-flex;align-items:center;padding:0 .7rem;border:1px solid var(--input);border-right:none;border-radius:calc(var(--radius) - 2px) 0 0 calc(var(--radius) - 2px);background:var(--muted);color:var(--muted-foreground);font-size:.875rem;white-space:nowrap}
+.phone-group .input{border-radius:0 calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0;flex:1}
+.phone-row{display:flex;gap:.5rem;margin-top:.5rem}
+.phone-row .input{flex:1}
+.phone-row .row-remove{flex:none}
 /* 已过期剩余徽章：红色闪烁 */
 @keyframes badge-blink{0%,100%{opacity:1}50%{opacity:.3}}
 .badge-blink{animation:badge-blink 1.1s ease-in-out infinite}

@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS phone_numbers (
     auto_expiry_period    INT          NULL,
     auto_calculated_expiry DATE        NULL,               -- 最近一次自动计算出的到期日
     no_keepalive          TINYINT      NOT NULL DEFAULT 0,
+    plan_name             TEXT,
+    secondary_numbers     TEXT,
     status                VARCHAR(16)  NOT NULL DEFAULT 'active',
     notes                 TEXT         NULL,
     created_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,

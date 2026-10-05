@@ -26,29 +26,30 @@ const dateLayout = "2006-01-02"
 type Country struct {
 	Code string
 	Name string
+	Dial string // 国际区号，不含 +
 }
 
 // Countries 预置国家/地区列表，覆盖常见 eSIM/境外号码来源地，可按需扩充。
 var Countries = []Country{
-	{"CN", "中国"}, {"HK", "香港"}, {"MO", "澳门"}, {"TW", "台湾"},
-	{"JP", "日本"}, {"KR", "韩国"}, {"SG", "新加坡"}, {"MY", "马来西亚"},
-	{"TH", "泰国"}, {"VN", "越南"}, {"PH", "菲律宾"}, {"ID", "印度尼西亚"},
-	{"IN", "印度"}, {"KH", "柬埔寨"}, {"MM", "缅甸"}, {"LA", "老挝"},
-	{"MV", "马尔代夫"}, {"PK", "巴基斯坦"}, {"BD", "孟加拉国"}, {"NP", "尼泊尔"},
-	{"AE", "阿联酋"}, {"SA", "沙特阿拉伯"}, {"QA", "卡塔尔"}, {"IL", "以色列"},
-	{"TR", "土耳其"}, {"KZ", "哈萨克斯坦"},
-	{"GB", "英国"}, {"DE", "德国"}, {"FR", "法国"}, {"IT", "意大利"},
-	{"ES", "西班牙"}, {"PT", "葡萄牙"}, {"NL", "荷兰"}, {"BE", "比利时"},
-	{"CH", "瑞士"}, {"AT", "奥地利"}, {"SE", "瑞典"}, {"NO", "挪威"},
-	{"DK", "丹麦"}, {"FI", "芬兰"}, {"IE", "爱尔兰"}, {"IS", "冰岛"},
-	{"PL", "波兰"}, {"CZ", "捷克"}, {"HU", "匈牙利"}, {"GR", "希腊"},
-	{"RO", "罗马尼亚"}, {"BG", "保加利亚"}, {"HR", "克罗地亚"}, {"UA", "乌克兰"},
-	{"RU", "俄罗斯"}, {"LT", "立陶宛"}, {"LV", "拉脱维亚"}, {"EE", "爱沙尼亚"},
-	{"US", "美国"}, {"CA", "加拿大"}, {"MX", "墨西哥"}, {"BR", "巴西"},
-	{"AR", "阿根廷"}, {"CL", "智利"}, {"CO", "哥伦比亚"}, {"PE", "秘鲁"},
-	{"AU", "澳大利亚"}, {"NZ", "新西兰"}, {"FJ", "斐济"},
-	{"ZA", "南非"}, {"EG", "埃及"}, {"KE", "肯尼亚"}, {"NG", "尼日利亚"},
-	{"MA", "摩洛哥"}, {"MU", "毛里求斯"},
+	{"CN", "中国", "86"}, {"HK", "香港", "852"}, {"MO", "澳门", "853"}, {"TW", "台湾", "886"},
+	{"JP", "日本", "81"}, {"KR", "韩国", "82"}, {"SG", "新加坡", "65"}, {"MY", "马来西亚", "60"},
+	{"TH", "泰国", "66"}, {"VN", "越南", "84"}, {"PH", "菲律宾", "63"}, {"ID", "印度尼西亚", "62"},
+	{"IN", "印度", "91"}, {"KH", "柬埔寨", "855"}, {"MM", "缅甸", "95"}, {"LA", "老挝", "856"},
+	{"MV", "马尔代夫", "960"}, {"PK", "巴基斯坦", "92"}, {"BD", "孟加拉国", "880"}, {"NP", "尼泊尔", "977"},
+	{"AE", "阿联酋", "971"}, {"SA", "沙特阿拉伯", "966"}, {"QA", "卡塔尔", "974"}, {"IL", "以色列", "972"},
+	{"TR", "土耳其", "90"}, {"KZ", "哈萨克斯坦", "7"},
+	{"GB", "英国", "44"}, {"DE", "德国", "49"}, {"FR", "法国", "33"}, {"IT", "意大利", "39"},
+	{"ES", "西班牙", "34"}, {"PT", "葡萄牙", "351"}, {"NL", "荷兰", "31"}, {"BE", "比利时", "32"},
+	{"CH", "瑞士", "41"}, {"AT", "奥地利", "43"}, {"SE", "瑞典", "46"}, {"NO", "挪威", "47"},
+	{"DK", "丹麦", "45"}, {"FI", "芬兰", "358"}, {"IE", "爱尔兰", "353"}, {"IS", "冰岛", "354"},
+	{"PL", "波兰", "48"}, {"CZ", "捷克", "420"}, {"HU", "匈牙利", "36"}, {"GR", "希腊", "30"},
+	{"RO", "罗马尼亚", "40"}, {"BG", "保加利亚", "359"}, {"HR", "克罗地亚", "385"}, {"UA", "乌克兰", "380"},
+	{"RU", "俄罗斯", "7"}, {"LT", "立陶宛", "370"}, {"LV", "拉脱维亚", "371"}, {"EE", "爱沙尼亚", "372"},
+	{"US", "美国", "1"}, {"CA", "加拿大", "1"}, {"MX", "墨西哥", "52"}, {"BR", "巴西", "55"},
+	{"AR", "阿根廷", "54"}, {"CL", "智利", "56"}, {"CO", "哥伦比亚", "57"}, {"PE", "秘鲁", "51"},
+	{"AU", "澳大利亚", "61"}, {"NZ", "新西兰", "64"}, {"FJ", "斐济", "679"},
+	{"ZA", "南非", "27"}, {"EG", "埃及", "20"}, {"KE", "肯尼亚", "254"}, {"NG", "尼日利亚", "234"},
+	{"MA", "摩洛哥", "212"}, {"MU", "毛里求斯", "230"},
 }
 
 // Carriers 常见运营商候选（表单 datalist，可自由输入）。
@@ -70,6 +71,16 @@ func countryNameByCode(code string) string {
 	for _, c := range Countries {
 		if c.Code == code {
 			return c.Name
+		}
+	}
+	return ""
+}
+
+// countryDialByCode 按 ISO 代码查国际区号（不含 +）；未收录返回空串。
+func countryDialByCode(code string) string {
+	for _, c := range Countries {
+		if c.Code == code {
+			return c.Dial
 		}
 	}
 	return ""
@@ -274,7 +285,7 @@ func (a *App) HandleNumberNew(w http.ResponseWriter, r *http.Request) {
 		a.saveNumberForm(w, r, u.ID, nil, &d)
 		return
 	}
-	d.Content = map[string]any{"Countries": Countries, "Carriers": Carriers}
+	d.Content = map[string]any{"Countries": Countries, "Carriers": Carriers, "Country": ""}
 	a.render(w, http.StatusOK, "page_number_form", d)
 }
 
@@ -307,9 +318,26 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		return
 	}
 
-	phone := normalizePhone(r.PostFormValue("phone_number"))
 	countryCode := strings.TrimSpace(r.PostFormValue("country_code"))
 	countryName := countryNameByCode(countryCode)
+	dial := countryDialByCode(countryCode)
+	// 主号：用户只填号码本体，区号按所选国家自动带上；粘贴了带区号的完整号码则不重复拼接
+	national := strings.TrimSpace(r.PostFormValue("phone_national"))
+	if strings.HasPrefix(national, "+") {
+		national = "+" + strings.TrimLeft(national[1:], dial) // 粘贴整号：剥掉区号避免重复
+	} else if dial != "" && strings.HasPrefix(national, dial) {
+		national = strings.TrimPrefix(national, dial)
+	}
+	phone := normalizePhone("+" + dial + national)
+	// 副卡：多行自由录入（不带区号），空行忽略
+	var secondaries []string
+	for _, v := range r.Form["secondary"] {
+		if v = strings.TrimSpace(v); v != "" {
+			secondaries = append(secondaries, v)
+		}
+	}
+	secondary := strings.Join(secondaries, "\n")
+	planName := strings.TrimSpace(r.PostFormValue("plan_name"))
 	carrier := strings.TrimSpace(r.PostFormValue("carrier"))
 	expiry := strings.TrimSpace(r.PostFormValue("expiry_date"))
 	amount, _ := strconv.ParseFloat(r.PostFormValue("recharge_amount"), 64)
@@ -347,7 +375,7 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		RenewalDaysBefore: renewalDays, UsageDaysBefore: usageDays,
 		AutoExpiryEnabled: autoEnabled, AutoStartDate: autoStart,
 		AutoExpiryPeriod: autoPeriod, Status: status, Notes: notes,
-		NoKeepalive: noKeepalive,
+		NoKeepalive: noKeepalive, PlanName: planName, SecondaryNumbers: secondary,
 	}
 	if existing != nil {
 		submitted.ID = existing.ID
@@ -406,7 +434,7 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		RenewalDaysBefore: renewalDays, UsageDaysBefore: usageDays,
 		AutoExpiryEnabled: autoEnabled, AutoStartDate: autoStart,
 		AutoExpiryPeriod: autoPeriod, Status: status, Notes: notes,
-		NoKeepalive: noKeepalive,
+		NoKeepalive: noKeepalive, PlanName: planName, SecondaryNumbers: secondary,
 	}
 	if autoEnabled {
 		n.AutoCalculatedExpiry = expiry
@@ -733,12 +761,27 @@ var funcMap = template.FuncMap{
 		}
 		return template.URL(b.String())
 	},
+	// secondaryLines 把副卡存储文本（每行一个）拆成列表。
+	"secondaryLines": func(s string) []string {
+		var out []string
+		for _, line := range strings.Split(s, "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				out = append(out, line)
+			}
+		}
+		return out
+	},
+	// phoneNational 编辑回显：完整号码去掉 +区号，得到号码本体。
+	"phoneNational": func(n store.PhoneNumber) string {
+		return strings.TrimPrefix(n.PhoneNumber, "+"+countryDialByCode(n.CountryCode))
+	},
 	// countryJSON / countryName：国家可搜索选择器用。
 	"countryJSON": func(v any) template.JS {
 		b, _ := json.Marshal(v)
 		return template.JS(b)
 	},
 	"countryName": countryNameByCode,
+	"countryDial": countryDialByCode,
 	// firstRune 取用户名首字符（按 rune），用作侧边栏头像字母。
 	"firstRune": func(s string) string {
 		for _, r := range strings.TrimSpace(s) {
