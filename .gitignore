@@ -12,3 +12,6 @@
 
 # 测试残留
 *.log
+sk_tmp.exe
+sk_tmp.exe~
+sk_*/
