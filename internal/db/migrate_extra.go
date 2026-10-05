@@ -34,6 +34,11 @@ var notificationConfigColumns = []ColumnSpec{
 	{Name: "tgcall_target", SQLiteType: "TEXT", MySQLType: "VARCHAR(64)", PGType: "TEXT"},
 }
 
+// phoneNumberColumns phone_numbers 表的历史演进列。
+var phoneNumberColumns = []ColumnSpec{
+	{Name: "no_keepalive", SQLiteType: "INTEGER NOT NULL DEFAULT 0", MySQLType: "TINYINT NOT NULL DEFAULT 0", PGType: "INT NOT NULL DEFAULT 0"},
+}
+
 // notificationColumns notifications 表的历史演进列。
 var notificationColumns = []ColumnSpec{
 	{Name: "retry_count", SQLiteType: "INTEGER NOT NULL DEFAULT 0", MySQLType: "INT NOT NULL DEFAULT 0", PGType: "INT NOT NULL DEFAULT 0"},
@@ -137,6 +142,9 @@ func (d *DB) migrateExtra() error {
 	if _, err := d.ensureColumns("users", userColumns); err != nil {
 		return err
 	}
+	if _, err := d.ensureColumns("phone_numbers", phoneNumberColumns); err != nil {
+		return err
+	}
 	if _, err := d.ensureColumns("notifications", notificationColumns); err != nil {
 		return err
 	}
@@ -222,6 +230,7 @@ func (d *DB) relaxPeriodCheckSQLite() error {
     auto_start_date       TEXT,
     auto_expiry_period    INTEGER CHECK (auto_expiry_period IS NULL OR auto_expiry_period BETWEEN 1 AND 3650),
     auto_calculated_expiry TEXT,
+    no_keepalive          INTEGER NOT NULL DEFAULT 0,
     status                TEXT    NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
     notes                 TEXT,
     created_at            TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
@@ -280,7 +289,7 @@ func (d *DB) relaxPeriodCheckSQLite() error {
 	for _, name := range []string{"id", "user_id", "phone_number", "country_code", "country_name", "carrier",
 		"expiry_date", "recharge_amount", "recharge_currency", "renewal_days_before", "usage_days_before",
 		"auto_expiry_enabled", "auto_start_date", "auto_expiry_period", "auto_calculated_expiry",
-		"status", "notes", "created_at", "updated_at"} {
+		"status", "notes", "created_at", "updated_at", "no_keepalive"} {
 		if newCols[name] && oldCols[name] {
 			cols = append(cols, name)
 		}

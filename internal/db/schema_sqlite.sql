@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS phone_numbers (
     auto_start_date       TEXT,                          -- 自动续期起始日
     auto_expiry_period    INTEGER CHECK (auto_expiry_period IS NULL OR auto_expiry_period BETWEEN 1 AND 3650),
     auto_calculated_expiry TEXT,                         -- 最近一次自动计算出的到期日
+    no_keepalive          INTEGER NOT NULL DEFAULT 0,    -- 无需保号：不参与到期提醒
     status                TEXT    NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
     notes                 TEXT,
     created_at            TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),

@@ -11,13 +11,16 @@
 </div>
 
 <div class="card">
+  <div class="cat-chips">
+    <a class="chip {{if eq .Content.Cat ""}}active{{end}}" href="/numbers{{querySuffix .Content.Search .Content.Sort ""}}">全部 <b>{{.Content.Total}}</b></a>
+    <a class="chip {{if eq .Content.Cat "cycle"}}active{{end}}" href="/numbers{{querySuffix .Content.Search .Content.Sort "cycle"}}">需要周期性保号 <b>{{.Content.Counts.Cycle}}</b></a>
+    <a class="chip {{if eq .Content.Cat "none"}}active{{end}}" href="/numbers{{querySuffix .Content.Search .Content.Sort "none"}}">无需保号 <b>{{.Content.Counts.None}}</b></a>
+    <a class="chip {{if eq .Content.Cat "expired"}}active{{end}}" href="/numbers{{querySuffix .Content.Search .Content.Sort "expired"}}">已过期 <b>{{.Content.Counts.Expired}}</b></a>
+    <a class="chip {{if eq .Content.Cat "inactive"}}active{{end}}" href="/numbers{{querySuffix .Content.Search .Content.Sort "inactive"}}">已停用 <b>{{.Content.Counts.Inactive}}</b></a>
+  </div>
   <form method="get" action="/numbers" class="toolbar">
+    {{if .Content.Cat}}<input type="hidden" name="cat" value="{{.Content.Cat}}">{{end}}
     <input class="input" type="text" name="q" value="{{.Content.Search}}" placeholder="搜索号码 / 国家 / 运营商 / 备注">
-    <select class="select auto" name="status">
-      <option value="">全部状态</option>
-      <option value="active" {{if eq .Content.Status "active"}}selected{{end}}>使用中</option>
-      <option value="inactive" {{if eq .Content.Status "inactive"}}selected{{end}}>已停用</option>
-    </select>
     <select class="select auto" name="sort">
       <option value="expiry_asc" {{if ne .Content.Sort "expiry_desc"}}{{if ne .Content.Sort "created_desc"}}selected{{end}}{{end}}>到期日 ↑</option>
       <option value="expiry_desc" {{if eq .Content.Sort "expiry_desc"}}selected{{end}}>到期日 ↓</option>
@@ -27,7 +30,7 @@
   </form>
   <div class="card-content flush">
     {{if not .Content.Numbers}}
-    <div class="empty">{{if or .Content.Search .Content.Status}}没有匹配的号码{{else}}还没有号码，点击右上角添加。{{end}}</div>
+    <div class="empty">{{if or .Content.Search .Content.Cat}}没有匹配的号码{{else}}还没有号码，点击右上角添加。{{end}}</div>
     {{else}}
     <div class="tbl-wrap">
       <table class="tbl">
@@ -41,12 +44,11 @@
             <td><span class="mono-strong phone-val">{{.PhoneNumber}}</span></td>
             <td>{{.CountryName}}{{if .Carrier}}<br><small class="muted">{{.Carrier}}</small>{{end}}</td>
             <td>
-              {{.ExpiryDate}}
-              {{if gt (cycleProgress .) -1}}
+              {{if .NoKeepalive}}<span class="muted">—</span>{{else}}{{.ExpiryDate}}{{if gt (cycleProgress .) -1}}
               <div class="progress" title="当前周期进度 {{cycleProgress .}}%"><i class="{{fillClass (daysLeft .)}}" style="width:{{cycleProgress .}}%"></i></div>
-              {{end}}
+              {{end}}{{end}}
             </td>
-            <td><span class="badge {{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span></td>
+            <td>{{if .NoKeepalive}}<span class="badge-sec">无需保号</span>{{else}}<span class="badge {{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span>{{end}}</td>
             <td>{{if ne .Status "inactive"}}<span class="badge badge-ok">使用中</span>{{else}}<span class="badge badge-muted">已停用</span>{{end}}</td>
             <td>
               {{if .AutoExpiryEnabled}}
@@ -83,9 +85,9 @@
     </div>
     {{if gt .Content.Pages 1}}
     <div class="pager">
-      {{if gt .Content.Page 1}}<a class="btn btn-sm btn-outline" href="/numbers?page={{sub .Content.Page 1}}{{if .Content.Search}}&q={{.Content.Search}}{{end}}{{if .Content.Status}}&status={{.Content.Status}}{{end}}{{if .Content.Sort}}&sort={{.Content.Sort}}{{end}}">‹ 上一页</a>{{end}}
+      {{if gt .Content.Page 1}}<a class="btn btn-sm btn-outline" href="/numbers?page={{sub .Content.Page 1}}{{if .Content.Search}}&q={{.Content.Search}}{{end}}{{if .Content.Cat}}&cat={{.Content.Cat}}{{end}}{{if .Content.Sort}}&sort={{.Content.Sort}}{{end}}">‹ 上一页</a>{{end}}
       <span>第 {{.Content.Page}} / {{.Content.Pages}} 页</span>
-      {{if lt .Content.Page .Content.Pages}}<a class="btn btn-sm btn-outline" href="/numbers?page={{add .Content.Page 1}}{{if .Content.Search}}&q={{.Content.Search}}{{end}}{{if .Content.Status}}&status={{.Content.Status}}{{end}}{{if .Content.Sort}}&sort={{.Content.Sort}}{{end}}">下一页 ›</a>{{end}}
+      {{if lt .Content.Page .Content.Pages}}<a class="btn btn-sm btn-outline" href="/numbers?page={{add .Content.Page 1}}{{if .Content.Search}}&q={{.Content.Search}}{{end}}{{if .Content.Cat}}&cat={{.Content.Cat}}{{end}}{{if .Content.Sort}}&sort={{.Content.Sort}}{{end}}">下一页 ›</a>{{end}}
     </div>
     {{end}}
     {{end}}

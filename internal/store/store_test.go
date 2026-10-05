@@ -471,3 +471,45 @@ func TestNumberMarkRenewed(t *testing.T) {
 		t.Fatalf("非归属用户应 0 行命中, got %d, err %v", n, err)
 	}
 }
+
+
+// TestNoKeepaliveRoundTripAndExclusion 无需保号：字段往返；到期提醒与周期滚动均排除。
+func TestNoKeepaliveRoundTripAndExclusion(t *testing.T) {
+	h := testDB(t)
+	r := &NumberRepo{DB: h}
+	uid := mustUser(t, &UserRepo{DB: h}, "nk", "user")
+	past := time.Now().AddDate(0, 0, -5).Format("2006-01-02")
+
+	nkID, err := r.Create(&PhoneNumber{
+		UserID: uid, PhoneNumber: "+85268000000", CountryCode: "HK", CountryName: "香港",
+		ExpiryDate: past, Status: "active", NoKeepalive: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := r.ByID(nkID, uid)
+	if err != nil || !got.NoKeepalive {
+		t.Fatalf("no_keepalive 应往返保留, got %+v err %v", got, err)
+	}
+
+	normalID, err := r.Create(&PhoneNumber{
+		UserID: uid, PhoneNumber: "+85268000001", CountryCode: "HK", CountryName: "香港",
+		ExpiryDate: past, Status: "active",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 到期提醒：只包含普通号码，无需保号被排除
+	expiring, err := r.ListExpiring()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := map[int64]bool{}
+	for _, n := range expiring {
+		ids[n.ID] = true
+	}
+	if ids[nkID] || !ids[normalID] {
+		t.Fatalf("ListExpiring 应排除无需保号: %+v", ids)
+	}
+}

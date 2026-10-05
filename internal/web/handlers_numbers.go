@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -119,6 +120,9 @@ func (a *App) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 	today := time.Now()
 	active := make([]store.PhoneNumber, 0, len(numbers))
 	for i := range numbers {
+		if numbers[i].NoKeepalive {
+			continue // 无需保号：不进到期统计与摘要
+		}
 		days := numbers[i].DaysLeft(today)
 		if days >= 0 && days <= 7 {
 			page.Expiring7++
@@ -148,8 +152,35 @@ type NumbersPage struct {
 	Page    int
 	Pages   int
 	Search  string
-	Status  string
+	Cat     string
 	Sort    string
+	Counts  CategoryCounts
+}
+
+// CategoryCounts 号码三类保号分类 + 已停用的数量（互斥，合计 = 总数）。
+type CategoryCounts struct {
+	Cycle    int // 需要周期性保号（活跃、未过期）
+	None     int // 无需保号
+	Expired  int // 已过期
+	Inactive int // 已停用
+}
+
+// categoryCounts 按优先级归类：无需保号 > 已过期 > 已停用 > 周期保号。
+func categoryCounts(nums []store.PhoneNumber, now time.Time) CategoryCounts {
+	var c CategoryCounts
+	for i := range nums {
+		switch {
+		case nums[i].NoKeepalive:
+			c.None++
+		case nums[i].DaysLeft(now) < 0:
+			c.Expired++
+		case nums[i].Status == "inactive":
+			c.Inactive++
+		default:
+			c.Cycle++
+		}
+	}
+	return c
 }
 
 // HandleNumbers 号码管理列表：关键词/状态过滤 + 排序 + 分页。
@@ -161,14 +192,15 @@ func (a *App) HandleNumbers(w http.ResponseWriter, r *http.Request) {
 	d.ActiveNav = "numbers"
 
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	status := r.URL.Query().Get("status")
+	cat := r.URL.Query().Get("cat")
 	sortKey := r.URL.Query().Get("sort")
 	all, _, err := a.Numbers.ListForUser(u.ID, 1, 1000000)
 	if err != nil {
 		http.Error(w, "内部错误", http.StatusInternalServerError)
 		return
 	}
-	filtered := filterSortNumbers(all, q, status, sortKey)
+	counts := categoryCounts(all, time.Now())
+	filtered := filterSortNumbers(all, q, cat, sortKey)
 	total := len(filtered)
 	pageNum := atoiDefault(r.URL.Query().Get("page"), 1)
 	pages := (total + 19) / 20
@@ -186,21 +218,36 @@ func (a *App) HandleNumbers(w http.ResponseWriter, r *http.Request) {
 	if end > total {
 		end = total
 	}
-	d.Content = NumbersPage{Numbers: filtered[start:end], Total: total, Page: pageNum, Pages: pages, Search: q, Status: status, Sort: sortKey}
+	d.Content = NumbersPage{Numbers: filtered[start:end], Total: total, Page: pageNum, Pages: pages, Search: q, Cat: cat, Sort: sortKey, Counts: counts}
 	a.render(w, http.StatusOK, "page_numbers", d)
 }
 
 // filterSortNumbers 纯函数：关键词匹配号码/国家/运营商/备注（不区分大小写），
-// 状态过滤，按到期时间（默认升序）/降序/最新添加排序；平局按 ID 保证稳定。
-func filterSortNumbers(all []store.PhoneNumber, q, status, sortKey string) []store.PhoneNumber {
+// 分类过滤（与 categoryCounts 的优先级口径一致），按到期时间（默认升序）/
+// 降序/最新添加排序；无需保号号码在到期排序中排最后；平局按 ID 保证稳定。
+func filterSortNumbers(all []store.PhoneNumber, q, cat, sortKey string) []store.PhoneNumber {
 	q = strings.ToLower(strings.TrimSpace(q))
+	now := time.Now()
 	out := make([]store.PhoneNumber, 0, len(all))
 	for _, n := range all {
-		if status == "active" && n.Status != "active" {
-			continue
-		}
-		if status == "inactive" && n.Status != "inactive" {
-			continue
+		expired := n.DaysLeft(now) < 0
+		switch cat {
+		case "none":
+			if !n.NoKeepalive {
+				continue
+			}
+		case "expired":
+			if n.NoKeepalive || !expired {
+				continue
+			}
+		case "cycle":
+			if n.NoKeepalive || expired || n.Status != "active" {
+				continue
+			}
+		case "inactive":
+			if n.NoKeepalive || expired || n.Status != "inactive" {
+				continue
+			}
 		}
 		if q != "" {
 			hay := strings.ToLower(n.PhoneNumber + " " + n.CountryName + " " + n.CountryCode + " " + n.Carrier + " " + n.Notes)
@@ -210,15 +257,25 @@ func filterSortNumbers(all []store.PhoneNumber, q, status, sortKey string) []sto
 		}
 		out = append(out, n)
 	}
-	less := func(i, j int) bool { return out[i].ID < out[j].ID }
-	switch sortKey {
-	case "expiry_desc":
-		less = func(i, j int) bool {
+	// 无需保号号码的到期日仅作参考，任何到期排序中都排最后
+	byExpiry := func(desc bool) func(i, j int) bool {
+		return func(i, j int) bool {
+			if out[i].NoKeepalive != out[j].NoKeepalive {
+				return out[j].NoKeepalive // 非无需保号在前
+			}
 			if out[i].ExpiryDate != out[j].ExpiryDate {
-				return out[i].ExpiryDate > out[j].ExpiryDate
+				if desc {
+					return out[i].ExpiryDate > out[j].ExpiryDate
+				}
+				return out[i].ExpiryDate < out[j].ExpiryDate
 			}
 			return out[i].ID < out[j].ID
 		}
+	}
+	var less func(i, j int) bool
+	switch sortKey {
+	case "expiry_desc":
+		less = byExpiry(true)
 	case "created_desc":
 		less = func(i, j int) bool {
 			if out[i].CreatedAt != out[j].CreatedAt {
@@ -227,12 +284,7 @@ func filterSortNumbers(all []store.PhoneNumber, q, status, sortKey string) []sto
 			return out[i].ID > out[j].ID
 		}
 	default: // expiry_asc
-		less = func(i, j int) bool {
-			if out[i].ExpiryDate != out[j].ExpiryDate {
-				return out[i].ExpiryDate < out[j].ExpiryDate
-			}
-			return out[i].ID < out[j].ID
-		}
+		less = byExpiry(false)
 	}
 	sort.Slice(out, less)
 	return out
@@ -296,9 +348,28 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	if status != "inactive" {
 		status = "active"
 	}
-	autoEnabled := r.PostFormValue("auto_expiry_enabled") == "1"
+	// 保号方式三选一：cycle 周期自动续期 / date 到期提醒（手动）/ none 无需保号。
+	// 旧表单未携带 keepalive_mode 时按自动续期开关推导，保持兼容。
+	mode := r.PostFormValue("keepalive_mode")
+	autoEnabled := false
+	noKeepalive := false
+	switch mode {
+	case "cycle":
+		autoEnabled = true
+	case "none":
+		noKeepalive = true
+	default:
+		mode = "date"
+		if r.PostFormValue("auto_expiry_enabled") == "1" {
+			mode, autoEnabled = "cycle", true
+		}
+	}
 	autoStart := strings.TrimSpace(r.PostFormValue("auto_start_date"))
 	autoPeriod := atoiDefault(r.PostFormValue("auto_expiry_period"), 0)
+	if noKeepalive {
+		// 无需保号：清空周期字段；到期日可留空或仅作备注
+		autoStart, autoPeriod = "", 0
+	}
 
 	// 校验失败回显用：以本次提交值构造实体——报错后表单不清空；
 	// 编辑模式下沿用原 ID（模板据 ID 区分编辑/新增）且回显用户改过的值而非库里旧值。
@@ -309,6 +380,7 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		RenewalDaysBefore: renewalDays, UsageDaysBefore: usageDays,
 		AutoExpiryEnabled: autoEnabled, AutoStartDate: autoStart,
 		AutoExpiryPeriod: autoPeriod, Status: status, Notes: notes,
+		NoKeepalive: noKeepalive,
 	}
 	if existing != nil {
 		submitted.ID = existing.ID
@@ -330,26 +402,36 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		return
 	}
 
-	if autoEnabled {
-		// 自动续期模式：到期日 = 起始日 + 周期，手填到期日被忽略（与 PHP 版一致）
+	if noKeepalive {
+		// 无需保号：到期日可选，仅作备注；不参与任何提醒与滚动
+		if expiry != "" {
+			var err error
+			expiryDate, err = time.ParseInLocation(dateLayout, expiry, time.Local)
+			if err != nil {
+				fail("到期日期格式应为 YYYY-MM-DD")
+				return
+			}
+		}
+	} else if autoEnabled {
+		// 周期自动续期：到期日 = 起始日 + 周期，手填到期日被忽略（与 PHP 版一致）
 		if autoStart == "" {
-			fail("启用自动续期需填写起始日期")
+			fail("周期自动续期需填写开始日期")
 			return
 		}
 		start, err := time.ParseInLocation(dateLayout, autoStart, time.Local)
 		if err != nil {
-			fail("自动续期起始日期格式应为 YYYY-MM-DD")
+			fail("周期开始日期格式应为 YYYY-MM-DD")
 			return
 		}
 		if autoPeriod < 1 || autoPeriod > 3650 {
-			fail("自动续期周期应为 1-3650 天")
+			fail("续期周期应为 1-3650 天")
 			return
 		}
 		expiryDate = start.AddDate(0, 0, autoPeriod)
 		expiry = expiryDate.Format(dateLayout)
 	} else {
 		if expiry == "" {
-			fail("请填写到期日期，或启用自动续期")
+			fail("请填写到期日期，或改选其他保号方式")
 			return
 		}
 		var err error
@@ -375,6 +457,7 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		RenewalDaysBefore: renewalDays, UsageDaysBefore: usageDays,
 		AutoExpiryEnabled: autoEnabled, AutoStartDate: autoStart,
 		AutoExpiryPeriod: autoPeriod, Status: status, Notes: notes,
+		NoKeepalive: noKeepalive,
 	}
 	if autoEnabled {
 		n.AutoCalculatedExpiry = expiry
@@ -656,6 +739,21 @@ var funcMap = template.FuncMap{
 			return "fill-warn"
 		}
 		return "fill-ok"
+	},
+	// querySuffix 拼接列表链接的查询串（chips 切换分类时保留搜索词与排序）。
+	"querySuffix": func(q, sort, cat string) template.URL {
+		var b strings.Builder
+		b.WriteString("?")
+		if q != "" {
+			b.WriteString("q=" + url.QueryEscape(q) + "&")
+		}
+		if sort != "" {
+			b.WriteString("sort=" + url.QueryEscape(sort) + "&")
+		}
+		if cat != "" {
+			b.WriteString("cat=" + url.QueryEscape(cat) + "&")
+		}
+		return template.URL(b.String())
 	},
 	// countryJSON / countryName：国家可搜索选择器用。
 	"countryJSON": func(v any) template.JS {

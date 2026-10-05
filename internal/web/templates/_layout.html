@@ -363,6 +363,19 @@ pre.msg{background:var(--muted);border-radius:calc(var(--radius) - 2px);padding:
 .combo-item{padding:.45rem .75rem;font-size:.875rem;cursor:pointer}
 .combo-item small{color:var(--muted-foreground)}
 .combo-item:hover,.combo-item.active{background:var(--accent)}
+/* 保号方式三选一 */
+.mode-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.6rem;margin-bottom:1.1rem}
+.mode-item{cursor:pointer;position:relative}
+.mode-item input{position:absolute;opacity:0;pointer-events:none}
+.mode-card{display:block;border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);padding:.7rem .8rem;transition:.12s;height:100%}
+.mode-card b{display:block;font-size:.875rem;font-weight:600}
+.mode-card small{display:block;color:var(--muted-foreground);font-size:.75rem;margin-top:.2rem;line-height:1.45}
+.mode-item input:checked+.mode-card{border-color:var(--foreground);background:var(--accent)}
+.mode-item input:focus-visible+.mode-card{box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 25%,transparent)}
+@media(max-width:720px){.mode-row{grid-template-columns:1fr}}
+/* 分类 chips 行 */
+.cat-chips{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;padding:.75rem 1rem;border-bottom:1px solid var(--border)}
+.cat-chips .chip b{font-weight:600;margin-left:.15rem}
 /* 号码列表工具栏 */
 .toolbar{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;padding:.75rem 1rem;border-bottom:1px solid var(--border)}
 .toolbar .input{width:14rem}

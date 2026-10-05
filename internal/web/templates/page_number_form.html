@@ -1,5 +1,7 @@
 {{define "page_number_form"}}{{template "head" .}}
 {{$N := .Content.N}}
+{{$mode := "date"}}
+{{if $N}}{{if $N.NoKeepalive}}{{$mode = "none"}}{{else if $N.AutoExpiryEnabled}}{{$mode = "cycle"}}{{end}}{{end}}
 <div class="page-head">
   <div>
     <h1 class="page-title">{{if and $N $N.ID}}编辑号码{{else}}添加号码{{end}}</h1>
@@ -42,8 +44,9 @@
         </div>
         <div class="field">
           <label class="label" for="n-expiry">精确到期日期</label>
-          <input class="input" type="date" id="n-expiry" name="expiry_date" value="{{with $N}}{{.ExpiryDate}}{{end}}">
-          {{if and $N $N.ID}}<p class="hint">开启周期计算时以此字段为准重新计算</p>{{end}}
+          <input class="input" type="date" id="n-expiry" name="expiry_date" value="{{with $N}}{{.ExpiryDate}}{{end}}"
+                 {{if eq $mode "date"}}required{{end}}>
+          <p class="hint" id="expiry-field-hint">{{if eq $mode "cycle"}}开启周期计算时以此字段为准重新计算{{else}}「到期提醒」方式下必填；其余方式可选，仅作备注{{end}}</p>
         </div>
         <div class="field">
           <label class="label" for="n-amount">建议充值金额</label>
@@ -83,14 +86,23 @@
       </div>
 
       <div class="sec">
-        <h3 class="sec-title">到期时间</h3>
-        <p class="sec-sub">直接填写上面的精确到期日期，或开启周期计算：到期日 = 开始日期 + 周期，到期后自动顺延</p>
-        <label class="switch-row" for="auto-enable">
-          <span class="switch"><input type="checkbox" id="auto-enable" name="auto_expiry_enabled" value="1"
-                 {{if $N}}{{if $N.AutoExpiryEnabled}}checked{{end}}{{end}}><i></i></span>
-          <span class="txt">周期自动计算</span>
-        </label>
-        <div class="form-grid">
+        <h3 class="sec-title">保号方式</h3>
+        <p class="sec-sub">三类号码：周期自动续期 / 到期提醒（手动保号）/ 无需保号</p>
+        <div class="mode-row" id="keepalive-modes">
+          <label class="mode-item">
+            <input type="radio" name="keepalive_mode" value="cycle" {{if eq $mode "cycle"}}checked{{end}}>
+            <span class="mode-card"><b>周期自动续期</b><small>到期日 = 开始日期 + 周期，到期自动顺延并提醒续费</small></span>
+          </label>
+          <label class="mode-item">
+            <input type="radio" name="keepalive_mode" value="date" {{if eq $mode "date"}}checked{{end}}>
+            <span class="mode-card"><b>到期提醒</b><small>手动充值保号，到期前按提醒窗口推送通知</small></span>
+          </label>
+          <label class="mode-item">
+            <input type="radio" name="keepalive_mode" value="none" {{if eq $mode "none"}}checked{{end}}>
+            <span class="mode-card"><b>无需保号</b><small>号码长期有效，不参与到期提醒</small></span>
+          </label>
+        </div>
+        <div class="form-grid" id="cycle-fields">
           <div class="field">
             <label class="label" for="n-autostart">开始日期</label>
             <input class="input" type="date" id="n-autostart" name="auto_start_date" value="{{with $N}}{{.AutoStartDate}}{{end}}">
@@ -183,8 +195,7 @@ const SK_COUNTRIES = {{countryJSON .Content.Countries}};
 })();
 
 (function () {
-  const auto = document.getElementById('auto-enable'),
-        start = document.getElementById('n-autostart'),
+  const start = document.getElementById('n-autostart'),
         period = document.getElementById('n-autoperiod'),
         expiry = document.getElementById('n-expiry'),
         out = document.getElementById('expiry-preview');
@@ -197,8 +208,19 @@ const SK_COUNTRIES = {{countryJSON .Content.Countries}};
       c.classList.toggle('active', c.dataset.days === period.value);
     });
   }
+  function currentMode() {
+    const r = document.querySelector('input[name="keepalive_mode"]:checked');
+    return r ? r.value : 'date';
+  }
+  function refresh() {
+    const m = currentMode();
+    document.getElementById('cycle-fields').hidden = m !== 'cycle';
+    document.getElementById('n-expiry').required = m === 'date';
+    preview();
+  }
   function preview() {
-    if (auto.checked) {
+    const m = currentMode();
+    if (m === 'cycle') {
       const n = parseInt(period.value, 10);
       if (!start.value || !n || n < 1) {
         out.textContent = '开启周期计算后：到期日 = 开始日期 + 周期，到期自动顺延';
@@ -208,21 +230,25 @@ const SK_COUNTRIES = {{countryJSON .Content.Countries}};
       d.setDate(d.getDate() + n);
       const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
       out.textContent = '开始：' + fmtCN(start.value) + ' → 到期：' + fmtCN(iso) + '（每 ' + n + ' 天自动顺延）';
-    } else if (expiry.value) {
+    } else if (m === 'date') {
+      if (!expiry.value) { out.textContent = ''; return; }
       const days = Math.round((new Date(expiry.value + 'T00:00:00') - new Date(new Date().toDateString())) / 86400000);
       out.textContent = '到期：' + fmtCN(expiry.value) + '（' + (days < 0 ? '已过期 ' + (-days) + ' 天' : '剩余 ' + days + ' 天') + '）';
     } else {
-      out.textContent = '';
+      out.textContent = '该号码无需保号：不参与到期提醒；到期日期可留空或仅作备注。';
     }
   }
   document.querySelectorAll('#period-chips .chip').forEach(function (c) {
     c.addEventListener('click', function () { period.value = c.dataset.days; markChips(); preview(); });
   });
-  [auto, start, period, expiry].forEach(function (el) {
+  document.querySelectorAll('input[name="keepalive_mode"]').forEach(function (r) {
+    r.addEventListener('change', refresh);
+  });
+  [start, period, expiry].forEach(function (el) {
     el.addEventListener('change', function () { markChips(); preview(); });
     el.addEventListener('input', function () { markChips(); preview(); });
   });
-  markChips(); preview();
+  refresh();
 })();
 </script>
 {{template "foot" .}}{{end}}

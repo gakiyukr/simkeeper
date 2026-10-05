@@ -119,33 +119,44 @@ func TestFilterSortNumbers(t *testing.T) {
 	nums := []store.PhoneNumber{
 		mk(3, "+8613800000003", "中国", "移动", "备用", "active", "2026-12-01", "2026-10-01 10:00:00"),
 		mk(1, "+85266000001", "香港", "CSL", "", "active", "2026-11-01", "2026-10-03 09:00:00"),
-		mk(2, "+442079460958", "英国", "EE", "主力号", "inactive", "2026-12-15", "2026-10-02 12:00:00"),
+		mk(2, "+442079460958", "英国", "EE", "主力号", "inactive", "2020-01-01", "2026-10-02 12:00:00"), // 已过期+停用
+		mk(4, "+8613900000004", "中国", "联通", "", "active", "2099-01-01", "2026-10-04 08:00:00"),
 	}
+	nums[3].NoKeepalive = true
 
 	// 关键词：备注匹配
 	if got := filterSortNumbers(nums, "主力号", "", ""); len(got) != 1 || got[0].ID != 2 {
 		t.Errorf("备注搜索应命中 ID=2, got %+v", got)
 	}
-	// 关键词：国家名大小写不敏感
-	if got := filterSortNumbers(nums, "香港", "", ""); len(got) != 1 || got[0].ID != 1 {
-		t.Errorf("国家搜索应命中 ID=1, got %+v", got)
+	// 分类：无需保号
+	if got := filterSortNumbers(nums, "", "none", ""); len(got) != 1 || got[0].ID != 4 {
+		t.Errorf("无需保号分类应命中 ID=4, got %+v", got)
 	}
-	// 状态过滤
-	if got := filterSortNumbers(nums, "", "active", ""); len(got) != 2 {
-		t.Errorf("active 过滤应剩 2 条, got %d", len(got))
+	// 分类：已过期（停用过期号归入已过期，优先于已停用）
+	if got := filterSortNumbers(nums, "", "expired", ""); len(got) != 1 || got[0].ID != 2 {
+		t.Errorf("已过期分类应命中 ID=2, got %+v", got)
 	}
-	// 默认排序：到期日升序（11-01 < 12-01，停用号在未过滤时仍参与）
-	got := filterSortNumbers(nums, "", "", "")
-	if got[0].ID != 1 || got[1].ID != 3 || got[2].ID != 2 {
-		t.Errorf("默认到期升序错误: %d,%d,%d", got[0].ID, got[1].ID, got[2].ID)
+	// 分类：需要周期性保号（活跃未过期，含手动与周期）
+	got := filterSortNumbers(nums, "", "cycle", "")
+	if len(got) != 2 || got[0].ID != 1 || got[1].ID != 3 {
+		t.Errorf("周期保号分类应为 ID=1,3, got %+v", got)
+	}
+	// 分类：已停用（排除已过期与无需保号后无剩余）
+	if got := filterSortNumbers(nums, "", "inactive", ""); len(got) != 0 {
+		t.Errorf("已停用分类应为空, got %+v", got)
+	}
+	// 默认排序：到期升序，无需保号排最后
+	got = filterSortNumbers(nums, "", "", "")
+	if got[0].ID != 2 || got[1].ID != 1 || got[2].ID != 3 || got[3].ID != 4 {
+		t.Errorf("默认排序错误: %v", []int64{got[0].ID, got[1].ID, got[2].ID, got[3].ID})
 	}
 	// 降序 + 最新添加
 	got = filterSortNumbers(nums, "", "", "expiry_desc")
-	if got[0].ID != 2 {
-		t.Errorf("到期降序应 ID=2 在前, got %d", got[0].ID)
+	if got[0].ID != 3 {
+		t.Errorf("到期降序应 ID=3 在前, got %d", got[0].ID)
 	}
 	got = filterSortNumbers(nums, "", "", "created_desc")
-	if got[0].ID != 1 {
-		t.Errorf("最新添加应 ID=1 在前, got %d", got[0].ID)
+	if got[0].ID != 4 {
+		t.Errorf("最新添加应 ID=4 在前, got %d", got[0].ID)
 	}
 }
