@@ -121,12 +121,12 @@
       {{if and $N $N.ID}}
       <div class="sec">
         <h3 class="sec-title">状态</h3>
-        <p class="sec-sub">标记丢失后仅作记录、不再提醒，可随时恢复为使用中</p>
+        <p class="sec-sub">终止后仅作记录、不再提醒，可随时撤销恢复为使用中</p>
         <div class="form-grid">
           <div class="field">
             <select class="select" name="status">
               <option value="active" {{if ne $N.Status "inactive"}}selected{{end}}>使用中</option>
-              <option value="inactive" {{if eq $N.Status "inactive"}}selected{{end}}>号码已丢失</option>
+              <option value="inactive" {{if eq $N.Status "inactive"}}selected{{end}}>已终止</option>
             </select>
           </div>
         </div>

@@ -166,16 +166,16 @@ func (a *App) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 	a.render(w, http.StatusOK, "page_dashboard", d)
 }
 
-// CategoryCounts 号码三类保号分类 + 号码已丢失的数量（互斥，合计 = 总数）。
+// CategoryCounts 号码三类保号分类 + 已终止的数量（互斥，合计 = 总数）。
 type CategoryCounts struct {
 	Cycle   int // 需要周期性保号（活跃、未过期）
 	None    int // 无需保号
-	Lost    int // 号码已丢失（仅作记录）
+	Lost    int // 已终止（仅作记录）
 	Expired int // 已过期
 }
 
-// categoryCounts 按优先级归类：无需保号 > 号码已丢失 > 已过期 > 周期保号。
-// 丢失是用户显式标记的记录，即使其到期日已过也归入丢失，避免找不到。
+// categoryCounts 按优先级归类：无需保号 > 已终止 > 已过期 > 周期保号。
+// 终止是用户显式标记的记录，即使其到期日已过也归入终止，避免找不到。
 func categoryCounts(nums []store.PhoneNumber, now time.Time) CategoryCounts {
 	var c CategoryCounts
 	for i := range nums {
@@ -212,7 +212,7 @@ func filterSortNumbers(all []store.PhoneNumber, q, cat, sortKey string) []store.
 			if !n.NoKeepalive {
 				continue
 			}
-		case "inactive": // 号码已丢失（优先于已过期）
+		case "inactive": // 已终止（优先于已过期）
 			if n.NoKeepalive || n.Status != "inactive" {
 				continue
 			}
@@ -480,8 +480,8 @@ func (a *App) HandleNumberRenew(w http.ResponseWriter, r *http.Request) {
 	back(fmt.Sprintf("已标记续费，到期日更新至 %s", newExpiry), false)
 }
 
-// HandleNumberSetStatus 快捷切换号码状态：标记丢失（仅作记录）↔ 恢复使用。
-// 丢失的号码不参与提醒与配额，可随时恢复。
+// HandleNumberSetStatus 快捷切换号码状态：终止（仅作记录）↔ 撤销恢复使用。
+// 已终止的号码不参与提醒与配额，可随时撤销。
 func (a *App) HandleNumberSetStatus(w http.ResponseWriter, r *http.Request) {
 	u := a.currentUser(r)
 	back := func(msg string, isErr bool) {
@@ -507,10 +507,10 @@ func (a *App) HandleNumberSetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if status == "inactive" {
-		back("已标记为号码丢失（仅作记录，不再提醒）", false)
+		back("已终止：仅作记录，不再提醒", false)
 		return
 	}
-	back("已恢复使用", false)
+	back("已撤销终止，恢复为使用中", false)
 }
 
 // HandleNumberDelete 删除号码（POST + CSRF + 归属校验）。
@@ -628,7 +628,7 @@ var funcMap = template.FuncMap{
 	},
 	"statusText": func(s string) string {
 		if s == "inactive" {
-			return "号码已丢失"
+			return "已终止"
 		}
 		return "使用中"
 	},

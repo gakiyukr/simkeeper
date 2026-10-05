@@ -116,8 +116,8 @@ func (r *NumberRepo) Update(n *PhoneNumber) error {
 	return err
 }
 
-// SetStatus 更新号码状态（active 使用中 / inactive 号码已丢失）。
-// 丢失状态仅作记录：不参与提醒、不占配额，可随时恢复。
+// SetStatus 更新号码状态（active 使用中 / inactive 已终止）。
+// 终止状态仅作记录：不参与提醒、不占配额，可随时撤销。
 func (r *NumberRepo) SetStatus(id, userID int64, status string) (int64, error) {
 	res, err := r.DB.Exec(
 		`UPDATE phone_numbers SET status = ?, updated_at = ? WHERE id = ? AND user_id = ?`,

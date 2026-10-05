@@ -31,7 +31,7 @@
             <td>{{.CountryName}}<br><small class="muted">{{.Carrier}}</small></td>
             <td>{{.ExpiryDate}}</td>
             <td><span class="badge {{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span></td>
-            <td>{{if .NoKeepalive}}<span class="badge-sec">无需保号</span>{{else if ne .Status "inactive"}}<span class="badge badge-ok">使用中</span>{{else}}<span class="badge badge-muted">号码已丢失</span>{{end}}</td>
+            <td>{{if .NoKeepalive}}<span class="badge-sec">无需保号</span>{{else if ne .Status "inactive"}}<span class="badge badge-ok">使用中</span>{{else}}<span class="badge badge-muted">已终止</span>{{end}}</td>
             <td class="muted">{{.RechargeCurrency}}</td>
           </tr>
           {{end}}
