@@ -10,7 +10,9 @@ import (
 	"simkeeper/internal/db"
 )
 
-// SessionTTL 会话有效期。固定 7 天，不做滑动续期，到期需重新登录。
+// SessionTTL 会话有效期。滑动续期：已登录的活跃会话在剩余不足一半时
+// 自动延长到 now+TTL 并重发 Cookie，长期使用不再每 7 天强制重登；
+// 连续 7 天完全不访问则会话过期，需重新登录。
 const SessionTTL = 7 * 24 * time.Hour
 
 // Session 是一条服务器端会话记录。
@@ -116,6 +118,16 @@ func (s *SessionStore) Get(token string) (*Session, error) {
 	}
 	sess.ExpiresAt = expires
 	return &sess, nil
+}
+
+// Touch 滑动续期：把会话过期时间延长到 now+ttl（仅对已验证登录的会话调用；
+// 匿名预会话不续）。调用方负责同时重发 Cookie 以同步 MaxAge。
+func (s *SessionStore) Touch(token string, ttl time.Duration) error {
+	_, err := s.DB.Exec(
+		`UPDATE sessions SET expires_at = ? WHERE token = ?`,
+		time.Now().Add(ttl).Format(time.DateTime), token,
+	)
+	return err
 }
 
 // Destroy 删除指定会话（登出）。

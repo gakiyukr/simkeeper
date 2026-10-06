@@ -133,6 +133,13 @@ func (a *App) sessionMiddleware(next http.Handler) http.Handler {
 					// 被封禁/停用的账号立即失效：查不到或状态异常都按未登录处理
 					if found, err := a.Users.ByID(sess.UserID); err == nil && found.Status == "active" {
 						u = found
+						// 滑动续期：剩余不足一半 TTL 时延长并重发 Cookie
+						//（写库频率约每 TTL/2 一次；匿名预会话与被封禁会话不续）
+						if time.Until(sess.ExpiresAt) < auth.SessionTTL/2 {
+							if terr := a.Sessions.Touch(sess.Token, auth.SessionTTL); terr == nil {
+								http.SetCookie(w, a.sessionCookie(r, sess.Token, int(auth.SessionTTL/time.Second)))
+							}
+						}
 					}
 				}
 				r = r.WithContext(withCtx(r, sess, u))

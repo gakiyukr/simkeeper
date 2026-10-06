@@ -37,6 +37,10 @@ import (
 	"simkeeper/internal/web"
 )
 
+// version 由 release 工作流通过 -ldflags "-X main.version=..." 注入；
+// 本地 go build 为 dev。
+var version = "dev"
+
 func main() {
 	log.SetFlags(log.LstdFlags)
 
@@ -74,8 +78,13 @@ func main() {
 			"凭据加密密钥文件（默认 data/secret.key；设置环境变量 SK_SECRET_KEY 时优先）")
 		cronInterval = flag.Duration("cron-interval", durationOr("SK_CRON_INTERVAL", time.Hour),
 			"定时任务执行间隔（如 30m、1h）；0 表示禁用进程内调度，仅保留管理后台手动触发")
+		showVersion = flag.Bool("version", false, "打印版本号后退出")
 	)
 	flag.Parse()
+	if *showVersion {
+		fmt.Println("simkeeper " + version)
+		return
+	}
 
 	if err := run(*driver, *dbPath, *dsn, *addr, *trustProxy, *secureCookies, *secretKeyFile, *cronInterval); err != nil {
 		log.Fatalf("[main] %v", err)
@@ -154,7 +163,7 @@ func run(driver, dbPath, dsn, addr string, trustProxy, secureCookies bool, secre
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
-		log.Printf("[main] SimKeeper 已启动（驱动 %s）: http://%s", driver, addr)
+		log.Printf("[main] SimKeeper %s 已启动（驱动 %s）: http://%s", version, driver, addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("[main] HTTP 服务异常退出: %v", err)
 		}

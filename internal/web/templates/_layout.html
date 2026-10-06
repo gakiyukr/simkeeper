@@ -103,6 +103,7 @@ function skTheme(){
   <span><span class="brand-name">{{.SiteName}}</span><br><span class="brand-sub">eSIM 保号到期提醒</span></span>
 </div>
 <main class="auth-card">
+{{if .Flash}}<div class="alert {{if .FlashIsErr}}alert-err{{else}}alert-ok{{end}}" style="margin-bottom:1.25rem">{{if .FlashIsErr}}{{template "ico_alert"}}{{else}}{{template "ico_check"}}{{end}}<span>{{.Flash}}</span></div>{{end}}
 {{end}}
 
 {{define "authfoot"}}

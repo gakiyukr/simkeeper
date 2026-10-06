@@ -5,8 +5,9 @@
     <p class="page-desc">统计、定时任务、系统设置与数据导出</p>
   </div>
   <div class="page-actions">
-    <a class="btn btn-outline" href="/admin/export?format=csv">{{template "ico_download"}}导出 CSV</a>
-    <a class="btn btn-outline" href="/admin/export?format=json">{{template "ico_download"}}导出 JSON</a>
+    <a class="btn btn-outline" href="/admin/export?format=csv">{{template "ico_download"}}CSV</a>
+    <a class="btn btn-outline" href="/admin/export?format=json">{{template "ico_download"}}JSON</a>
+    <a class="btn btn-outline" href="/admin/export?format=channels" title="含明文凭据，请妥善保管">{{template "ico_download"}}渠道配置</a>
   </div>
 </div>
 
@@ -55,6 +56,20 @@
         </div>
       </div>
       <button type="submit" class="btn" style="margin-top:1.4rem">保存设置</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">导入</h2>
+    <p class="card-desc">自动识别文件格式：SIMHub / 本程序号码 JSON、号码 CSV、渠道配置 JSON。号码按号码匹配（存在则更新、不存在则新建）；渠道配置导入会整份替换当前配置</p>
+  </div>
+  <div class="card-content">
+    <form method="post" action="/admin/import" enctype="multipart/form-data" class="toolbar" style="margin:0">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input class="input" type="file" name="file" accept=".json,.csv" required>
+      <button type="submit" class="btn btn-outline btn-sm">导入</button>
     </form>
   </div>
 </div>

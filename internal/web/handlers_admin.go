@@ -246,6 +246,20 @@ func (a *App) HandleAdminExport(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	name := "simkeeper-numbers-" + now.Format("20060102")
 	switch r.URL.Query().Get("format") {
+	case "channels":
+		cfg, err := a.Notify.ConfigForUser(u.ID)
+		if err != nil {
+			http.Error(w, "内部错误", http.StatusInternalServerError)
+			return
+		}
+		b, err := buildChannelsJSON(now, cfg)
+		if err != nil {
+			http.Error(w, "内部错误", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Content-Disposition", "attachment; filename=simkeeper-channels-"+now.Format("20060102")+".json")
+		_, _ = w.Write(b)
 	case "json":
 		b, err := buildNumbersJSON(now, numbers)
 		if err != nil {

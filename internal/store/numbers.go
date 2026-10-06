@@ -227,6 +227,14 @@ func (r *NumberRepo) CountDuplicate(userID int64, phone string, excludeID int64)
 	return n, err
 }
 
+// ByPhone 按号码查找用户名下的号码（导入匹配用；不限状态，多条取最早一条）。
+func (r *NumberRepo) ByPhone(userID int64, phone string) (*PhoneNumber, error) {
+	return scanNumber(r.DB.QueryRow(
+		`SELECT `+numberCols+` FROM phone_numbers WHERE user_id = ? AND phone_number = ? ORDER BY id LIMIT 1`,
+		userID, phone,
+	))
+}
+
 // ListForUser 分页列出某用户的号码。
 func (r *NumberRepo) ListForUser(userID int64, page, limit int) ([]PhoneNumber, int, error) {
 	return r.list(` WHERE user_id = ?`, []any{userID}, page, limit)

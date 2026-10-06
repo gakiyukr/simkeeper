@@ -61,6 +61,7 @@ func (a *App) Routes() http.Handler {
 	mux.Handle("GET /admin", a.requireLogin(a.HandleAdminHome))
 	mux.Handle("POST /admin/cron", a.requireLogin(a.csrfProtect(a.HandleAdminCron)))
 	mux.Handle("GET /admin/export", a.requireLogin(a.HandleAdminExport))
+	mux.Handle("POST /admin/import", a.requireLogin(a.limitBody(32<<20, a.csrfProtect(a.HandleAdminImport))))
 	mux.Handle("GET /admin/settings", a.requireLogin(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin", http.StatusMovedPermanently)
 	}))
