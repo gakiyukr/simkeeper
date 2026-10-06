@@ -12,6 +12,8 @@ go build -o simkeeper .
 # 首次启动访问 http://127.0.0.1:8080/setup 创建账号（单账号系统，创建后入口永久关闭）
 ```
 
+不想自己编译的话，每次推送 main 都会自动发布 [Releases](https://github.com/gakiyukr/simkeeper/releases)：含 linux-amd64 / linux-arm64 / windows-amd64 静态二进制与自动生成的更新日志，版本号自 v0.1.0 起步。
+
 ## 路线图
 
 ### 余额与周期扣费追踪（帐单）——已规划，未实现

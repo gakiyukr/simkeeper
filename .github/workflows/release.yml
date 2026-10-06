@@ -1,0 +1,88 @@
+# 每次推送到 main 自动发布 Release：
+# - 版本号从 v0.1.0 起步，每次有新提交推送时 patch +1；HEAD 已在最新版本上则跳过
+# - Release 说明由上一版本以来的 commit 列表自动生成
+# - 产物：linux-amd64 / linux-arm64 / windows-amd64 静态二进制（CGO_ENABLED=0，与部署一致）
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+
+      - name: Determine version
+        id: ver
+        run: |
+          LATEST=$(git tag -l 'v*' --sort=-v:refname | head -1)
+          if [ -z "$LATEST" ]; then
+            NEW="v0.1.0"
+          elif [ "$(git rev-parse "$LATEST^{commit}")" = "$(git rev-parse HEAD)" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            NEW="$LATEST"
+          else
+            NEW="v$(echo "${LATEST#v}" | awk -F. -v OFS=. '{$NF+=1; print}')"
+          fi
+          {
+            echo "skip=${skip:-false}"
+            echo "version=$NEW"
+            echo "prev=$LATEST"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        if: steps.ver.outputs.skip != 'true'
+        run: |
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/simkeeper-linux-amd64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/simkeeper-linux-arm64 .
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o dist/simkeeper-windows-amd64.exe .
+          ls -la dist/
+
+      - name: Generate release notes
+        if: steps.ver.outputs.skip != 'true'
+        run: |
+          VERSION=${{ steps.ver.outputs.version }}
+          PREV=${{ steps.ver.outputs.prev }}
+          {
+            echo "## 更新内容"
+            echo
+            if [ -n "$PREV" ]; then
+              git log "$PREV..HEAD" --pretty=format:"- %s (%h)"
+            else
+              git log HEAD --pretty=format:"- %s (%h)"
+            fi
+            echo
+            echo
+            if [ -n "$PREV" ]; then
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREV...$VERSION"
+              echo
+            fi
+            echo "---"
+            echo "静态单二进制，下载对应架构后可直接运行（linux-amd64 / linux-arm64 / windows-amd64.exe），部署步骤见 DEPLOY.md。"
+          } > notes.md
+
+      - name: Create release
+        if: steps.ver.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.ver.outputs.version }}" dist/* \
+            --title "${{ steps.ver.outputs.version }}" \
+            --notes-file notes.md \
+            --target "${{ github.sha }}"
