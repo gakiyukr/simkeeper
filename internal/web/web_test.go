@@ -242,6 +242,9 @@ func TestDashboardTemplateRenders(t *testing.T) {
 	if !strings.Contains(html, `<th>安装设备</th>`) || !strings.Contains(html, "Pixel 8") {
 		t.Error("安装设备列应显示设备名")
 	}
+	if !strings.Contains(html, "dev-badge dev-c3") {
+		t.Error("设备徽章应按 ID 稳定取色（ID 3 → c3）")
+	}
 
 	// 未知国家代码：不渲染旗帜，运营商文字仍在
 	if strings.Contains(html, "/flags/xx.svg") {

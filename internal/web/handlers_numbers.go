@@ -984,6 +984,10 @@ var funcMap = template.FuncMap{
 	},
 	// deviceTypeText 设备类型展示名（设备管理页）。
 	"deviceTypeText": deviceTypeText,
+	// devColor 设备徽章取色：按 ID 稳定映射到 8 色色板（同一设备恒定同色）。
+	"devColor": func(id int64) int {
+		return int(((id % 8) + 8) % 8)
+	},
 	"statusText": func(s string) string {
 		if s == "inactive" {
 			return "已终止"

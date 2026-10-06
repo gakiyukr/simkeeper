@@ -63,7 +63,7 @@
             <td>{{if .NoKeepalive}}<span class="badge-sec">无需保号</span>{{else}}<span class="badge {{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span>{{end}}</td>
             <td>{{if ne .Status "inactive"}}<span class="badge badge-ok">使用中</span>{{else}}<span class="badge badge-muted">已终止</span>{{end}}</td>
             <td>{{if gt .AutoExpiryPeriod 0}}<span class="badge-sec">{{.AutoExpiryPeriod}} 天周期</span>{{else}}<span class="muted">—</span>{{end}}</td>
-            <td>{{if .DeviceID}}<span class="badge-sec" title="安装设备">{{index $.Content.DeviceNames .DeviceID}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
+            <td>{{if .DeviceID}}<span class="dev-badge dev-c{{devColor .DeviceID}}" title="安装设备">{{index $.Content.DeviceNames .DeviceID}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
             <td>
               <div class="actions">
                 {{if ne .Status "inactive"}}

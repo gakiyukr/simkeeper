@@ -48,7 +48,7 @@
 <div class="card">
   <div class="card-header row">
     <div>
-      <h2 class="card-title">{{.Device.Name}}</h2>
+      <h2 class="card-title"><span class="dev-dot dev-c{{devColor .Device.ID}}"></span>{{.Device.Name}}</h2>
       <p class="card-desc">{{deviceTypeText .Device.DeviceType}}{{if .Device.Notes}} · {{.Device.Notes}}{{end}}</p>
     </div>
     <div class="actions">

@@ -323,6 +323,25 @@ pre.msg{background:var(--muted);border-radius:calc(var(--radius) - 2px);padding:
 /* 国旗小图（内嵌 SVG，列表运营商列）；描边让白底旗帜（日本等）在浅色主题下不隐身 */
 .flag{width:1.25em;height:.94em;object-fit:cover;border-radius:2px;vertical-align:-.09em;box-shadow:0 0 0 1px color-mix(in oklab,var(--border) 80%,transparent)}
 .carrier-name{white-space:nowrap}
+/* 设备徽章色板：按设备 ID 稳定取色（devColor），深浅主题各一套 */
+.dev-badge{display:inline-block;max-width:11rem;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;font-size:.75rem;font-weight:600;line-height:1.5;padding:.1rem .6rem;border-radius:9999px;white-space:nowrap}
+.dev-dot{display:inline-block;width:.65rem;height:.65rem;border-radius:50%;margin-right:.4rem;background:var(--muted)}
+.dev-c0{background:oklch(92.5% .06 25);color:oklch(42% .14 25)}
+.dev-c1{background:oklch(92.5% .06 60);color:oklch(42% .13 60)}
+.dev-c2{background:oklch(92% .07 130);color:oklch(40% .13 130)}
+.dev-c3{background:oklch(92% .055 190);color:oklch(42% .11 190)}
+.dev-c4{background:oklch(92% .055 250);color:oklch(42% .12 250)}
+.dev-c5{background:oklch(92% .06 290);color:oklch(42% .13 290)}
+.dev-c6{background:oklch(92% .06 330);color:oklch(42% .14 330)}
+.dev-c7{background:oklch(93% .05 15);color:oklch(43% .12 15)}
+.dark .dev-c0{background:oklch(30% .05 25);color:oklch(82% .1 25)}
+.dark .dev-c1{background:oklch(30% .05 60);color:oklch(82% .09 60)}
+.dark .dev-c2{background:oklch(29% .055 130);color:oklch(80% .09 130)}
+.dark .dev-c3{background:oklch(29% .045 190);color:oklch(80% .08 190)}
+.dark .dev-c4{background:oklch(30% .05 250);color:oklch(80% .09 250)}
+.dark .dev-c5{background:oklch(30% .05 290);color:oklch(80% .1 290)}
+.dark .dev-c6{background:oklch(30% .05 330);color:oklch(80% .1 330)}
+.dark .dev-c7{background:oklch(30% .04 15);color:oklch(80% .09 15)}
 .tbl td.nowrap{white-space:nowrap}
 /* 手动保号对话框（号码列表「已续费」） */
 .renew-dialog{background:var(--card);color:var(--card-foreground);border:1px solid var(--border);border-radius:calc(var(--radius) + 2px);padding:0;max-width:26rem;width:calc(100% - 2rem);box-shadow:0 24px 60px rgba(0,0,0,.25)}
