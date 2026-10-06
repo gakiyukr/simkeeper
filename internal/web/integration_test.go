@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"simkeeper/internal/auth"
 	"simkeeper/internal/db"
@@ -355,5 +356,35 @@ func TestHTTPUnknownImportFormat(t *testing.T) {
 	resp.Body.Close()
 	if !strings.Contains(string(b), "无法识别的文件格式") {
 		t.Error("应提示无法识别格式")
+	}
+}
+
+// TestHTTPNumberLastKeepaliveMode 「我刚保过号」口径：服务端按
+// 上次保号日期 + 周期推算到期日，周期起点即上次保号日期。
+func TestHTTPNumberLastKeepaliveMode(t *testing.T) {
+	a := integrationApp(t)
+	mustAdmin(t, a)
+	srv, c := newTestServer(t, a)
+	loginAdmin(t, c, srv.URL)
+
+	last := time.Now().AddDate(0, 0, -3).Format("2006-01-02")
+	tok := getCSRF(t, c, srv.URL, "/numbers/new")
+	code, body := postForm(t, c, srv.URL, "/numbers/new", url.Values{
+		"country_code": {"JP"}, "phone_national": {"9012345678"}, "carrier": {"KDDI"},
+		"keepalive_mode": {"keep"}, "date_mode": {"last"},
+		"last_keepalive_date": {last}, "auto_expiry_period": {"180"},
+		"renewal_days_before": {"7"}, "csrf_token": {tok},
+	})
+	if code != 303 {
+		t.Fatalf("建号应 303, got %d %s", code, body)
+	}
+	n, err := a.Numbers.ByPhone(1, "+819012345678")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := time.Now().AddDate(0, 0, 177).Format("2006-01-02") // -3 + 180
+	if n.ExpiryDate != want || n.AutoStartDate != last {
+		t.Errorf("到期日应 = 上次保号 + 周期: expiry=%s want=%s start=%s want=%s",
+			n.ExpiryDate, want, n.AutoStartDate, last)
 	}
 }

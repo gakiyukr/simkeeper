@@ -129,10 +129,28 @@
         </div>
         <div id="keep-fields">
           <div class="form-grid">
-            <div class="field">
-              <label class="label" for="n-expiry">下次续费日期</label>
+            <div class="field span2">
+              <label class="label">日期口径</label>
+              <div class="mode-row" id="date-modes" style="margin-bottom:0">
+                <label class="mode-item">
+                  <input type="radio" name="date_mode" value="last" {{if eq .Content.DateMode "last"}}checked{{end}}>
+                  <span class="mode-card"><b>我刚保过号</b><small>填上次保号日期，到期日 = 它 + 周期</small></span>
+                </label>
+                <label class="mode-item">
+                  <input type="radio" name="date_mode" value="expiry" {{if ne .Content.DateMode "last"}}checked{{end}}>
+                  <span class="mode-card"><b>我知道到期日</b><small>直接填到期日，原样保存</small></span>
+                </label>
+              </div>
+            </div>
+            <div class="field" id="field-last" {{if ne .Content.DateMode "last"}}hidden{{end}}>
+              <label class="label" for="n-lastkeep">上次保号日期</label>
+              <input class="input" type="date" id="n-lastkeep" name="last_keepalive_date" value="{{.Content.LastKeepalive}}">
+              <p class="hint">你最近一次充值 / 使用的日期</p>
+            </div>
+            <div class="field" id="field-expiry" {{if eq .Content.DateMode "last"}}hidden{{end}}>
+              <label class="label" for="n-expiry">到期时间</label>
               <input class="input" type="date" id="n-expiry" name="expiry_date" value="{{with $N}}{{.ExpiryDate}}{{end}}" required>
-              <p class="hint">本周期到这一天截止（即到期日）；8.1 续费、三个月一续，就填 11.1</p>
+              <p class="hint">本周期到这一天截止；切到「我刚保过号」可自动换算</p>
             </div>
             <div class="field">
               <label class="label" for="n-autoperiod">续费周期（天，1-3650）</label>
@@ -297,40 +315,80 @@ const SK_COUNTRIES = {{countryJSON .Content.Countries}};
 
 (function () {
   const expiry = document.getElementById('n-expiry'),
+        last = document.getElementById('n-lastkeep'),
         period = document.getElementById('n-autoperiod'),
+        remind = document.getElementById('n-renewal'),
+        fieldLast = document.getElementById('field-last'),
+        fieldExpiry = document.getElementById('field-expiry'),
         out = document.getElementById('expiry-preview');
   const fmtCN = function (iso) {
     const p = iso.split('-');
     return p[0] + ' 年 ' + parseInt(p[1], 10) + ' 月 ' + parseInt(p[2], 10) + ' 日';
+  };
+  const shift = function (iso, days) {
+    if (!iso) return '';
+    const d = new Date(iso + 'T00:00:00');
+    if (isNaN(d)) return '';
+    d.setDate(d.getDate() + days);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   };
   function markChips() {
     document.querySelectorAll('#period-chips .chip').forEach(function (c) {
       c.classList.toggle('active', c.dataset.days === period.value);
     });
   }
-  function currentMode() {
+  function keepaliveMode() {
     const r = document.querySelector('input[name="keepalive_mode"]:checked');
     return r ? r.value : 'keep';
   }
+  function currentDateMode() {
+    const r = document.querySelector('input[name="date_mode"]:checked');
+    return r ? r.value : 'expiry';
+  }
+  function periodDays() {
+    const n = parseInt(period.value, 10);
+    return n >= 1 ? n : 0;
+  }
+  function remindDays() {
+    const n = parseInt(remind.value, 10);
+    return n >= 1 ? n : 7;
+  }
+  function effectiveExpiry() {
+    if (currentDateMode() === 'last') return periodDays() ? shift(last.value, periodDays()) : '';
+    return expiry.value;
+  }
   function refresh() {
-    document.getElementById('keep-fields').hidden = currentMode() !== 'keep';
+    const keep = keepaliveMode() === 'keep';
+    const m = currentDateMode();
+    document.getElementById('keep-fields').hidden = !keep;
+    fieldLast.hidden = !keep || m !== 'last';
+    fieldExpiry.hidden = !keep || m !== 'expiry';
+    last.required = keep && m === 'last';
+    expiry.required = keep && m === 'expiry';
+    markChips();
     preview();
   }
   function preview() {
-    if (currentMode() === 'none') {
+    if (keepaliveMode() === 'none') {
       out.textContent = '该号码无需保号：不参与到期提醒，无需填写周期。';
       return;
     }
-    const n = parseInt(period.value, 10);
-    if (!expiry.value || !n || n < 1) {
-      out.textContent = '例如：8 月 1 日续费、三个月一续，下次续费日期填 11 月 1 日、周期 90 天';
+    const p = periodDays();
+    const eff = effectiveExpiry();
+    if (!eff || !p) {
+      out.textContent = currentDateMode() === 'last'
+        ? '填入上次保号日期和周期后，这里会自动算出到期日与提醒日。'
+        : '填入到期日和周期后，这里会自动算出周期起点与提醒日。';
       return;
     }
-    const d0 = new Date(expiry.value + 'T00:00:00');
-    const s = new Date(d0);
-    s.setDate(s.getDate() - n);
-    const isoS = s.getFullYear() + '-' + String(s.getMonth() + 1).padStart(2, '0') + '-' + String(s.getDate()).padStart(2, '0');
-    out.textContent = '下次续费：' + fmtCN(expiry.value) + '（本周期开始：' + fmtCN(isoS) + '）· 每 ' + n + ' 天，续费后顺延一个周期';
+    const start = shift(eff, -p);
+    const rd = remindDays();
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let text = '到期：' + fmtCN(eff) + ' · 周期起点：' + fmtCN(start) +
+      ' · 保号提醒：' + fmtCN(shift(eff, -rd)) + '（提前 ' + rd + ' 天）' +
+      ' · 每 ' + p + ' 天，点「已续费」后顺延一个周期';
+    if (new Date(eff + 'T00:00:00') < today) text += ' · ⚠ 按此推算号码已过期';
+    out.textContent = text;
   }
   document.querySelectorAll('#period-chips .chip').forEach(function (c) {
     c.addEventListener('click', function () { period.value = c.dataset.days; markChips(); preview(); });
@@ -338,7 +396,16 @@ const SK_COUNTRIES = {{countryJSON .Content.Countries}};
   document.querySelectorAll('input[name="keepalive_mode"]').forEach(function (r) {
     r.addEventListener('change', refresh);
   });
-  [expiry, period].forEach(function (el) {
+  // 切换日期口径时双向自动换算（只填空位，不覆盖用户已改的值）
+  document.querySelectorAll('input[name="date_mode"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      const p = periodDays();
+      if (currentDateMode() === 'expiry' && last.value && !expiry.value) expiry.value = shift(last.value, p);
+      if (currentDateMode() === 'last' && expiry.value && !last.value) last.value = shift(expiry.value, -p);
+      refresh();
+    });
+  });
+  [expiry, last, period, remind].forEach(function (el) {
     el.addEventListener('change', function () { markChips(); preview(); });
     el.addEventListener('input', function () { markChips(); preview(); });
   });

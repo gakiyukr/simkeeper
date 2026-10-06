@@ -539,7 +539,9 @@ func (a *App) HandleNumberNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	devices, _ := a.Devices.ListForUser(u.ID)
-	d.Content = map[string]any{"Countries": Countries, "Carriers": Carriers, "Devices": devices, "Country": ""}
+	// 新增默认「我刚保过号」口径，上次保号日期预填今天（刚续完就录入的常见场景）
+	d.Content = map[string]any{"Countries": Countries, "Carriers": Carriers, "Devices": devices,
+		"Country": "", "DateMode": "last", "LastKeepalive": time.Now().Format(dateLayout)}
 	a.render(w, http.StatusOK, "page_number_form", d)
 }
 
@@ -559,8 +561,10 @@ func (a *App) HandleNumberEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	devices, _ := a.Devices.ListForUser(u.ID)
+	// 编辑默认「我知道到期日」口径；上次保号日期以周期起点预填（切口径即有正确值）
 	d.Content = map[string]any{
-		"Countries": Countries, "Carriers": Carriers, "Devices": devices, "N": number, "Country": number.CountryCode,
+		"Countries": Countries, "Carriers": Carriers, "Devices": devices, "N": number,
+		"Country": number.CountryCode, "DateMode": "expiry", "LastKeepalive": number.AutoStartDate,
 	}
 	a.render(w, http.StatusOK, "page_number_form", d)
 }
@@ -620,6 +624,15 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	}
 	autoEnabled := !noKeepalive
 
+	// 日期口径：last = 填上次保号日期（到期日由服务端加周期推算）；
+	// expiry = 直接填到期日。两种口径落库结构完全一致；空值按 expiry
+	//（旧客户端 / 无 JS 提交）处理。
+	dateMode := r.PostFormValue("date_mode")
+	if dateMode != "last" {
+		dateMode = "expiry"
+	}
+	lastKeepalive := strings.TrimSpace(r.PostFormValue("last_keepalive_date"))
+
 	// 号码类型：physical 实体卡 / esim。eSIM 才保留激活信息（LPA 激活码 +
 	// 确认码）；LPA 来自扫码复制的整串文本，去掉混入的空白再校验格式。
 	simType := "physical"
@@ -657,7 +670,7 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	if existing != nil {
 		submitted.ID = existing.ID
 	}
-	form := map[string]any{"Countries": Countries, "Carriers": Carriers, "Devices": devices, "N": submitted, "Country": countryCode}
+	form := map[string]any{"Countries": Countries, "Carriers": Carriers, "Devices": devices, "N": submitted, "Country": countryCode, "DateMode": dateMode, "LastKeepalive": lastKeepalive}
 	fail := func(msg string) {
 		d.Flash, d.FlashIsErr = msg, true
 		d.Content = form
@@ -665,6 +678,7 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	}
 
 	var expiryDate time.Time
+	expiryPast := false // last 口径推算出的到期日 ≤ 今天时置位，保存后附带提醒
 	switch {
 	case phone == "" || !phoneRe.MatchString(phone):
 		fail("号码格式不正确（示例：+8613800138000 或 13800138000）")
@@ -690,22 +704,41 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		// 无需保号：不录入到期日，不参与任何提醒与滚动
 		expiry = ""
 	} else {
-		// 需要周期性保号：下次续费日期即到期日；周期起点 = 到期日 - 周期
-		if expiry == "" {
-			fail("需要周期性保号的号码需填写下次续费日期")
-			return
-		}
-		var err error
-		expiryDate, err = time.ParseInLocation(dateLayout, expiry, time.Local)
-		if err != nil {
-			fail("下次续费日期格式应为 YYYY-MM-DD")
-			return
-		}
+		// 需要周期性保号：周期校验在前（last 口径推算到期日要用）
 		if autoPeriod < 1 || autoPeriod > 3650 {
 			fail("续费周期应为 1-3650 天")
 			return
 		}
-		autoStart = expiryDate.AddDate(0, 0, -autoPeriod).Format(dateLayout)
+		switch dateMode {
+		case "last":
+			// 上次保号日期 + 周期 = 到期日；周期起点即上次保号日期
+			if lastKeepalive == "" {
+				fail("请填写上次保号日期（或切换为「我知道到期日」直接填写）")
+				return
+			}
+			last, perr := time.ParseInLocation(dateLayout, lastKeepalive, time.Local)
+			if perr != nil {
+				fail("上次保号日期格式应为 YYYY-MM-DD")
+				return
+			}
+			expiryDate = last.AddDate(0, 0, autoPeriod)
+			expiry = expiryDate.Format(dateLayout)
+			autoStart = last.Format(dateLayout)
+			expiryPast = !expiryDate.After(time.Now())
+		default:
+			// 到期日直接填写，原样保存；周期起点 = 到期日 - 周期
+			if expiry == "" {
+				fail("需要周期性保号的号码需填写到期时间（或切换为「我刚保过号」填上次保号日期）")
+				return
+			}
+			var perr error
+			expiryDate, perr = time.ParseInLocation(dateLayout, expiry, time.Local)
+			if perr != nil {
+				fail("到期时间格式应为 YYYY-MM-DD")
+				return
+			}
+			autoStart = expiryDate.AddDate(0, 0, -autoPeriod).Format(dateLayout)
+		}
 	}
 	if renewalDays < 1 || renewalDays > 90 {
 		fail("保号提醒提前天数应为 1-90")
@@ -735,7 +768,11 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 			fail("保存失败，请重试")
 			return
 		}
-		a.setFlash(w, "号码已更新", false)
+		msg := "号码已更新"
+		if expiryPast {
+			msg += "。注意：按上次保号日期推算该号码已过期，点「已续费」可从今天起算复活"
+		}
+		a.setFlash(w, msg, false)
 	} else {
 		if cnt, err := a.Numbers.CountDuplicate(userID, phone, 0); err == nil && cnt > 0 {
 			fail("该号码已存在于你的列表中")
@@ -745,7 +782,11 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 			fail("保存失败，请重试")
 			return
 		}
-		a.setFlash(w, "号码已添加", false)
+		msg := "号码已添加"
+		if expiryPast {
+			msg += "。注意：按上次保号日期推算该号码已过期，点「已续费」可从今天起算复活"
+		}
+		a.setFlash(w, msg, false)
 	}
 	http.Redirect(w, r, "/numbers", http.StatusSeeOther)
 }
