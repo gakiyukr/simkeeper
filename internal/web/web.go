@@ -41,6 +41,8 @@ type App struct {
 	// TrustProxy 决定是否信任 X-Forwarded-For 取真实 IP。
 	// 部署在可信反代之后时由配置开启；默认关闭，避免伪造头绕过限流。
 	TrustProxy bool
+	// Version 二进制版本（main 通过 -ldflags -X 注入后传入，管理页展示）。
+	Version string
 	// SecureCookies 强制给会话 Cookie 加 Secure 标记。
 	// 直连 TLS 时程序能从 r.TLS 自行判断；TLS 由反向代理终结时
 	// 程序看到的是 HTTP，需要部署侧显式开启（-secure-cookies）。

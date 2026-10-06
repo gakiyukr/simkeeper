@@ -7,6 +7,24 @@
 - 一台 VPS（1 核 512MB 起步足够）+ 一个解析到它的域名
 - 本机装有 Go 1.27+（编译产物是静态二进制，服务器上**不需要装 Go**）
 
+## 0.5 一键脚本（推荐）
+
+`deploy/simkeeper.sh` 在 VPS 上以 root 运行，覆盖安装 / 升级 / 卸载全流程（升级自动备份 + 健康检查 + 失败自动回滚；二进制默认从 GitHub Releases 下载对应架构）：
+
+```bash
+# 首次安装（创建服务账号 / 目录 / systemd；时区默认 Asia/Shanghai，可用 SIMKEEPER_TZ 覆盖）
+curl -fsSL https://raw.githubusercontent.com/gakiyukr/simkeeper/main/deploy/simkeeper.sh -o simkeeper.sh
+SIMKEEPER_TZ=Asia/Shanghai bash simkeeper.sh install
+
+# 升级（默认拉最新 Release；也可 --version vX.Y.Z 或 --file 本地二进制）
+bash simkeeper.sh update
+
+# 卸载（默认保留数据；--purge 连数据一起删，需输入 yes 确认）
+bash simkeeper.sh remove
+```
+
+手动步骤 / 反向代理见下文各节。
+
 ## 1. 构建
 
 在本机项目根目录：

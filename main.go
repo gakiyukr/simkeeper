@@ -131,6 +131,7 @@ func run(driver, dbPath, dsn, addr string, trustProxy, secureCookies bool, secre
 	}
 	app.TrustProxy = trustProxy
 	app.SecureCookies = secureCookies
+	app.Version = version
 	if err := app.Settings.SeedDefaults(); err != nil {
 		return fmt.Errorf("写入默认设置失败: %w", err)
 	}

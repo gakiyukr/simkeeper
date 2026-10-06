@@ -26,6 +26,7 @@ type AdminPage struct {
 	Stats         AdminStats
 	SiteName      string
 	RetentionDays int
+	Version       string
 	RecentNotifs  []store.Notification
 }
 
@@ -50,6 +51,7 @@ func (a *App) HandleAdminHome(w http.ResponseWriter, r *http.Request) {
 		Stats:         stats,
 		SiteName:      getStr(a, "site_name", "SimKeeper"),
 		RetentionDays: a.Settings.GetInt("log_retention_days", 90),
+		Version:       a.Version,
 		RecentNotifs:  recent,
 	}
 	a.render(w, http.StatusOK, "page_admin_home", d)
