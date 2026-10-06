@@ -42,14 +42,14 @@
       <table class="tbl">
         <thead><tr>
           <th>运营商</th><th>号码</th><th>下次续费</th><th>剩余</th><th>状态</th>
-          <th>续费周期</th><th style="text-align:right">操作</th>
+          <th>续费周期</th><th>安装设备</th><th style="text-align:right">操作</th>
         </tr></thead>
         <tbody>
           {{range .Content.Numbers}}
           <tr>
             <td>
               {{flagHTML .CountryCode}}{{if .Carrier}} <span class="carrier-name">{{.Carrier}}</span>{{end}}
-              {{if .DeviceID}}<br><small class="muted" title="安装设备">设备 {{index $.Content.DeviceNames .DeviceID}}</small>{{end}}
+              {{if .Notes}}<br><small class="muted" title="备注">{{snippet .Notes}}</small>{{end}}
             </td>
             <td class="nowrap">
               <span class="mono-strong">{{fmtPhone .CountryCode .PhoneNumber}}</span>
@@ -63,6 +63,7 @@
             <td>{{if .NoKeepalive}}<span class="badge-sec">无需保号</span>{{else}}<span class="badge {{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span>{{end}}</td>
             <td>{{if ne .Status "inactive"}}<span class="badge badge-ok">使用中</span>{{else}}<span class="badge badge-muted">已终止</span>{{end}}</td>
             <td>{{if gt .AutoExpiryPeriod 0}}<span class="badge-sec">{{.AutoExpiryPeriod}} 天周期</span>{{else}}<span class="muted">—</span>{{end}}</td>
+            <td>{{if .DeviceID}}<span class="badge-sec" title="安装设备">{{index $.Content.DeviceNames .DeviceID}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
             <td>
               <div class="actions">
                 {{if ne .Status "inactive"}}

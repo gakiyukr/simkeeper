@@ -184,10 +184,12 @@ func TestDashboardTemplateRenders(t *testing.T) {
 		SiteName: "SimKeeper", Title: "号码管理", CSRFToken: "tok", Year: 2026,
 		User: &store.User{Username: "tester", Role: "user"},
 		Content: DashPage{
+			DeviceNames: map[int64]string{3: "Pixel 8"},
 			Numbers: []store.PhoneNumber{
 				{ID: 7, PhoneNumber: "+819012345678", CountryCode: "JP", CountryName: "日本",
 					Carrier: "KDDI", ExpiryDate: "2099-01-01", Status: "active",
-					RenewalDaysBefore: 7, AutoExpiryPeriod: 90},
+					RenewalDaysBefore: 7, AutoExpiryPeriod: 90,
+					Notes: "MESIM购买 主号", DeviceID: 3},
 				{PhoneNumber: "+99900000000", CountryCode: "XX", CountryName: "未知",
 					Carrier: "Mystery Telecom", ExpiryDate: "2099-01-01", Status: "active",
 					RenewalDaysBefore: 7},
@@ -231,6 +233,14 @@ func TestDashboardTemplateRenders(t *testing.T) {
 	}
 	if strings.Count(html, `name="mode"`) != 1 {
 		t.Errorf("每对话框应只有一个 mode 提交项, got %d", strings.Count(html, `name="mode"`))
+	}
+
+	// 备注与安装设备列
+	if !strings.Contains(html, "MESIM购买 主号") {
+		t.Error("备注应显示在运营商单元格")
+	}
+	if !strings.Contains(html, `<th>安装设备</th>`) || !strings.Contains(html, "Pixel 8") {
+		t.Error("安装设备列应显示设备名")
 	}
 
 	// 未知国家代码：不渲染旗帜，运营商文字仍在
