@@ -231,7 +231,6 @@ func (d *DB) relaxPeriodCheckSQLite() error {
     recharge_amount       REAL,
     recharge_currency     TEXT    NOT NULL DEFAULT 'USD',
     renewal_days_before   INTEGER NOT NULL DEFAULT 7,
-    usage_days_before     INTEGER NOT NULL DEFAULT 3,
     auto_expiry_enabled   INTEGER NOT NULL DEFAULT 0,
     auto_start_date       TEXT,
     auto_expiry_period    INTEGER CHECK (auto_expiry_period IS NULL OR auto_expiry_period BETWEEN 1 AND 3650),

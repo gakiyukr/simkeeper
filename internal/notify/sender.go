@@ -32,12 +32,10 @@ type Result struct {
 	FailedChannels    []string
 }
 
-// SubjectFor 生成渠道主题；语义与 PHP 版一致。
+// SubjectFor 生成渠道主题。续费/使用两类提醒已合并为统一的保号提醒，
+// typ 仅为历史兼容（通知记录里的旧 "usage" 类型重投时也用同一主题）。
 func SubjectFor(typ string) string {
-	if typ == "renewal" {
-		return "📱 eSIM续费提醒"
-	}
-	return "📞 eSIM使用提醒"
+	return "📱 eSIM保号提醒"
 }
 
 // decodeJSONBody 读取并解析渠道 JSON 响应。

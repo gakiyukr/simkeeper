@@ -184,7 +184,7 @@ func simhubCardToNumber(c simhubCard) (store.PhoneNumber, string) {
 	n.Carrier = strings.TrimSpace(c.Carrier)
 	n.ExpiryDate = expiry
 	n.Status = "active"
-	n.RenewalDaysBefore, n.UsageDaysBefore = 7, 3
+	n.RenewalDaysBefore = 7
 	n.SimType = "physical"
 	if code := strings.Join(strings.Fields(c.ActivationCode), ""); strings.HasPrefix(strings.ToUpper(code), "LPA:") {
 		n.SimType = "esim"
@@ -237,7 +237,6 @@ func (a *App) importNumbersFromSIMHub(userID int64, raw []byte) (created, update
 		}
 		n.ID, n.UserID, n.DeviceID = existing.ID, existing.UserID, existing.DeviceID
 		n.RenewalDaysBefore = existing.RenewalDaysBefore
-		n.UsageDaysBefore = existing.UsageDaysBefore
 		n.CreatedAt = existing.CreatedAt
 		if e = a.Numbers.Update(&n); e != nil {
 			skipped++
@@ -290,7 +289,7 @@ func (a *App) importNumbersFromCSV(userID int64, raw []byte) (created, updated, 
 			PhoneNumber: phone, CountryCode: cc, CountryName: name,
 			Carrier: at("运营商"), ExpiryDate: expiry,
 			Status: at("状态"), RechargeAmount: amount, RechargeCurrency: at("币种"),
-			RenewalDaysBefore: 7, UsageDaysBefore: 3, SimType: "physical",
+			RenewalDaysBefore: 7, SimType: "physical",
 		}
 		if n.Status != "inactive" {
 			n.Status = "active"
@@ -311,7 +310,7 @@ func (a *App) importNumbersFromCSV(userID int64, raw []byte) (created, updated, 
 		n.ID, n.UserID, n.DeviceID = existing.ID, existing.UserID, existing.DeviceID
 		n.SimType, n.LPAString, n.ConfirmCode = existing.SimType, existing.LPAString, existing.ConfirmCode
 		n.PlanName, n.Notes, n.SecondaryNumbers = existing.PlanName, existing.Notes, existing.SecondaryNumbers
-		n.RenewalDaysBefore, n.UsageDaysBefore = existing.RenewalDaysBefore, existing.UsageDaysBefore
+		n.RenewalDaysBefore = existing.RenewalDaysBefore
 		n.AutoExpiryEnabled, n.AutoStartDate, n.AutoExpiryPeriod, n.AutoCalculatedExpiry =
 			existing.AutoExpiryEnabled, existing.AutoStartDate, existing.AutoExpiryPeriod, existing.AutoCalculatedExpiry
 		n.CreatedAt = existing.CreatedAt

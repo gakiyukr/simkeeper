@@ -103,19 +103,13 @@
 
       <div class="sec">
         <h3 class="sec-title">提醒窗口</h3>
-        <p class="sec-sub">每个号码独立设置，按运营商规则调整（1-90 天）</p>
+        <p class="sec-sub">到期前按此天数推送一条保号提醒，每个号码独立设置（1-90 天）</p>
         <div class="form-grid">
           <div class="field">
-            <label class="label" for="n-renewal">续费提醒提前天数</label>
+            <label class="label" for="n-renewal">保号提醒提前天数</label>
             <input class="input" type="number" min="1" max="90" id="n-renewal" name="renewal_days_before"
                    value="{{with $N}}{{.RenewalDaysBefore}}{{else}}7{{end}}">
-            <p class="hint">默认 7 天</p>
-          </div>
-          <div class="field">
-            <label class="label" for="n-usage">使用提醒提前天数</label>
-            <input class="input" type="number" min="1" max="90" id="n-usage" name="usage_days_before"
-                   value="{{with $N}}{{.UsageDaysBefore}}{{else}}3{{end}}">
-            <p class="hint">默认 3 天</p>
+            <p class="hint">默认 7 天；只提示「该手动保号了」，按你的运营商规则操作即可</p>
           </div>
         </div>
       </div>

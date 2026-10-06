@@ -73,7 +73,7 @@ func TestNumbersDuplicateAndScope(t *testing.T) {
 	n := &PhoneNumber{
 		UserID: uid, PhoneNumber: "+85291234567", CountryCode: "HK", CountryName: "香港",
 		ExpiryDate: "2099-01-01", Status: "active",
-		RenewalDaysBefore: 7, UsageDaysBefore: 3,
+		RenewalDaysBefore: 7,
 	}
 	id, err := nr.Create(n)
 	if err != nil {

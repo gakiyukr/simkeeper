@@ -88,8 +88,8 @@ func (j *Jobs) RunOnce(now time.Time) (sent, failed int, lines []string) {
 }
 
 // sendDueNotifications 找出进入提醒窗口的号码并分发，返回 (成功, 失败) 条数。
-// 续费与使用两类提醒相互独立：同一号码可能同时进入两个窗口，各发一条
-// （与 PHP 版两条独立查询的行为一致），去重按（号码, 类型, 当天）维度。
+// 单一保号提醒：进入提醒窗口当天发一条（通知类型沿用历史命名 "renewal"），
+// 去重按（号码, 当天）维度。
 // userOutcome 汇总单个用户本轮的渠道投递结果。
 type userOutcome struct {
 	succeeded, failed []string
@@ -104,39 +104,33 @@ func (j *Jobs) sendDueNotifications(numbers []store.PhoneNumber, now time.Time, 
 			// 已过期的号码不再提醒（与 PHP 版 DATEDIFF >= 0 一致），需手动更新到期日
 			continue
 		}
-		for _, typ := range []string{"renewal", "usage"} {
-			daysBefore := n.RenewalDaysBefore
-			if typ == "usage" {
-				daysBefore = n.UsageDaysBefore
-			}
-			if days > daysBefore {
-				continue
-			}
-			done, err := j.notify.HasNotificationToday(n.ID, typ, now)
-			if err != nil {
-				logf("查询今日是否已发送失败(号码 %s): %v", n.PhoneNumber, err)
-				continue
-			}
-			if done {
-				continue
-			}
-			logf("发送%s通知: 用户ID=%d, 号码ID=%d", typeLabel(typ), n.UserID, n.ID)
-			res := j.sender.SendToEnabledChannels(n.UserID, n.ID, typ, buildMessage(typ, n, now))
-			sent += res.SentCount
-			failed += res.TotalChannels - res.SentCount
-			oc, ok := outcomes[n.UserID]
-			if !ok {
-				oc = &userOutcome{}
-				outcomes[n.UserID] = oc
-			}
-			oc.succeeded = append(oc.succeeded, res.SucceededChannels...)
-			oc.failed = append(oc.failed, res.FailedChannels...)
-			for _, e := range res.Errors {
-				logf("%s通知未送达部分渠道: %s", typeLabel(typ), e)
-			}
-			// 与 PHP 版一致：逐条间隔发送，避免短时间集中触发渠道限流
-			time.Sleep(time.Second)
+		if days > n.RenewalDaysBefore {
+			continue
 		}
+		done, err := j.notify.HasNotificationToday(n.ID, "renewal", now)
+		if err != nil {
+			logf("查询今日是否已发送失败(号码 %s): %v", n.PhoneNumber, err)
+			continue
+		}
+		if done {
+			continue
+		}
+		logf("发送保号通知: 用户ID=%d, 号码ID=%d", n.UserID, n.ID)
+		res := j.sender.SendToEnabledChannels(n.UserID, n.ID, "renewal", buildMessage(n, now))
+		sent += res.SentCount
+		failed += res.TotalChannels - res.SentCount
+		oc, ok := outcomes[n.UserID]
+		if !ok {
+			oc = &userOutcome{}
+			outcomes[n.UserID] = oc
+		}
+		oc.succeeded = append(oc.succeeded, res.SucceededChannels...)
+		oc.failed = append(oc.failed, res.FailedChannels...)
+		for _, e := range res.Errors {
+			logf("保号通知未送达部分渠道: %s", e)
+		}
+		// 逐条间隔发送，避免短时间集中触发渠道限流
+		time.Sleep(time.Second)
 	}
 	return outcomes, sent, failed
 }
@@ -252,15 +246,17 @@ func (j *Jobs) recordStats(sent, failed int, now time.Time, logf func(string, ..
 	logf("任务执行完成: 成功发送 %d 条通知, 失败 %d 条", sent, failed)
 }
 
+// typeLabel 通知类型的日志用名（历史 "usage" 记录重投时区分展示）。
 func typeLabel(typ string) string {
-	if typ == "renewal" {
-		return "续费"
+	if typ == "usage" {
+		return "使用（旧）"
 	}
-	return "使用"
+	return "保号"
 }
 
-// buildMessage 生成通知正文，文案与 PHP 版 generateNotificationMessage 一致。
-func buildMessage(typ string, n store.PhoneNumber, now time.Time) string {
+// buildMessage 生成保号通知正文。通知类型沿用历史命名 "renewal"，语义已
+// 合并为统一的「手动保号」——不再向用户区分充值还是活跃。
+func buildMessage(n store.PhoneNumber, now time.Time) string {
 	days := n.DaysLeft(now)
 	expireCN := n.ExpiryDate // 解析失败时保底展示原值
 	if t, err := time.ParseInLocation("2006-01-02", n.ExpiryDate, now.Location()); err == nil {
@@ -270,17 +266,8 @@ func buildMessage(typ string, n store.PhoneNumber, now time.Time) string {
 		"号码：%s\n国家：%s\n运营商：%s\n到期时间：%s\n剩余天数：%d天\n",
 		n.PhoneNumber, n.CountryName, n.Carrier, expireCN, days,
 	)
-	if typ == "renewal" {
-		amount := "未填写"
-		if n.RechargeAmount > 0 {
-			amount = strconv.FormatFloat(n.RechargeAmount, 'f', -1, 64) + " " + n.RechargeCurrency
-		}
-		return "📱 续费提醒\n\n" + head +
-			"建议充值金额：" + amount + "\n\n" +
-			"请及时为您的号码充值，避免因欠费导致号码失效。"
-	}
-	return "📞 使用提醒\n\n" + head +
-		"请记得使用您的号码（发送短信或拨打电话），以保持号码活跃状态。"
+	return "🔔 保号提醒\n\n" + head +
+		"该号码即将到期，请及时完成一次手动保号，避免号码失效。"
 }
 
 // Start 启动进程内周期调度：立即执行一轮，之后每隔 interval 执行一次。

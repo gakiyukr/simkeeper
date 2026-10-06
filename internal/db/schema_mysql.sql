@@ -34,7 +34,6 @@ CREATE TABLE IF NOT EXISTS phone_numbers (
     recharge_amount       DOUBLE       NULL,
     recharge_currency     VARCHAR(8)   NOT NULL DEFAULT 'USD',
     renewal_days_before   INT          NOT NULL DEFAULT 7, -- 续费提醒提前天数
-    usage_days_before     INT          NOT NULL DEFAULT 3, -- 使用提醒提前天数
     auto_expiry_enabled   TINYINT(1)   NOT NULL DEFAULT 0, -- 自动续期开关
     auto_start_date       DATE         NULL,               -- 自动续期起始日
     auto_expiry_period    INT          NULL,

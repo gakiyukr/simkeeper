@@ -187,10 +187,10 @@ func TestDashboardTemplateRenders(t *testing.T) {
 			Numbers: []store.PhoneNumber{
 				{ID: 7, PhoneNumber: "+819012345678", CountryCode: "JP", CountryName: "日本",
 					Carrier: "KDDI", ExpiryDate: "2099-01-01", Status: "active",
-					RenewalDaysBefore: 7, UsageDaysBefore: 3, AutoExpiryPeriod: 90},
+					RenewalDaysBefore: 7, AutoExpiryPeriod: 90},
 				{PhoneNumber: "+99900000000", CountryCode: "XX", CountryName: "未知",
 					Carrier: "Mystery Telecom", ExpiryDate: "2099-01-01", Status: "active",
-					RenewalDaysBefore: 7, UsageDaysBefore: 3},
+					RenewalDaysBefore: 7},
 			},
 			TotalAll: 2, Total: 2, Page: 1, Pages: 1,
 		},

@@ -1,7 +1,7 @@
 -- SimKeeper 数据库结构（SQLite）。
 -- 与 PHP 版的差异：删除了从未被业务逻辑使用的死字段
 -- （renewal_reminder_days / usage_reminder_days / last_usage_date），
--- 实际生效的提醒提前量是 renewal_days_before / usage_days_before。
+-- 实际生效的提醒提前量是 renewal_days_before（保号提醒；原续费/使用两类已合并）。
 -- 时间统一存 "YYYY-MM-DD HH:MM:SS" 文本，日期为 YYYY-MM-DD。
 -- WAL 与 foreign_keys 由 db.Open 的 DSN 编译参数开启，这里不再写 PRAGMA。
 
@@ -30,7 +30,6 @@ CREATE TABLE IF NOT EXISTS phone_numbers (
     recharge_amount       REAL,
     recharge_currency     TEXT    NOT NULL DEFAULT 'USD',
     renewal_days_before   INTEGER NOT NULL DEFAULT 7,    -- 续费提醒提前天数
-    usage_days_before     INTEGER NOT NULL DEFAULT 3,    -- 使用提醒提前天数
     auto_expiry_enabled   INTEGER NOT NULL DEFAULT 0,    -- 自动续期开关
     auto_start_date       TEXT,                          -- 自动续期起始日
     auto_expiry_period    INTEGER CHECK (auto_expiry_period IS NULL OR auto_expiry_period BETWEEN 1 AND 3650),

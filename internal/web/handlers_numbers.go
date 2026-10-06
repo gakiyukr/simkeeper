@@ -601,7 +601,6 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		currency = "USD"
 	}
 	renewalDays := atoiDefault(r.PostFormValue("renewal_days_before"), 7)
-	usageDays := atoiDefault(r.PostFormValue("usage_days_before"), 3)
 	notes := strings.TrimSpace(r.PostFormValue("notes"))
 	status := r.PostFormValue("status")
 	if status != "inactive" {
@@ -649,7 +648,7 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		UserID: userID, PhoneNumber: phone, CountryCode: countryCode, CountryName: countryName,
 		Carrier: carrier, ExpiryDate: expiry,
 		RechargeAmount: amount, RechargeCurrency: currency,
-		RenewalDaysBefore: renewalDays, UsageDaysBefore: usageDays,
+		RenewalDaysBefore: renewalDays,
 		AutoExpiryEnabled: autoEnabled, AutoStartDate: autoStart,
 		AutoExpiryPeriod: autoPeriod, Status: status, Notes: notes,
 		NoKeepalive: noKeepalive, PlanName: planName, SecondaryNumbers: secondary,
@@ -709,11 +708,7 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		autoStart = expiryDate.AddDate(0, 0, -autoPeriod).Format(dateLayout)
 	}
 	if renewalDays < 1 || renewalDays > 90 {
-		fail("续费提醒提前天数应为 1-90")
-		return
-	}
-	if usageDays < 1 || usageDays > 90 {
-		fail("使用提醒提前天数应为 1-90")
+		fail("保号提醒提前天数应为 1-90")
 		return
 	}
 
@@ -721,7 +716,7 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		UserID: userID, PhoneNumber: phone, CountryCode: countryCode, CountryName: countryName,
 		Carrier: carrier, ExpiryDate: expiry,
 		RechargeAmount: amount, RechargeCurrency: currency,
-		RenewalDaysBefore: renewalDays, UsageDaysBefore: usageDays,
+		RenewalDaysBefore: renewalDays,
 		AutoExpiryEnabled: autoEnabled, AutoStartDate: autoStart,
 		AutoExpiryPeriod: autoPeriod, Status: status, Notes: notes,
 		NoKeepalive: noKeepalive, PlanName: planName, SecondaryNumbers: secondary,
@@ -974,9 +969,9 @@ var funcMap = template.FuncMap{
 	"typeText": func(t string) string {
 		switch t {
 		case "renewal":
-			return "续费提醒"
+			return "保号提醒"
 		case "usage":
-			return "使用提醒"
+			return "使用提醒（旧）"
 		case "test":
 			return "测试"
 		}

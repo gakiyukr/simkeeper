@@ -235,7 +235,7 @@ func TestHTTPExportImportRoundTrip(t *testing.T) {
 	code, _ := postForm(t, c, srv.URL, "/numbers/new", url.Values{
 		"country_code": {"JP"}, "phone_national": {"9012345678"}, "carrier": {"KDDI"},
 		"expiry_date": {"2099-01-01"}, "auto_expiry_period": {"90"}, "keepalive_mode": {"keep"},
-		"renewal_days_before": {"7"}, "usage_days_before": {"3"}, "sim_type": {"esim"},
+		"renewal_days_before": {"7"}, "sim_type": {"esim"},
 		"lpa_string": {"LPA:1$rsp.example.com$ABCD"}, "device_id": {fmt.Sprint(devID)},
 		"csrf_token": {tok},
 	})
