@@ -984,6 +984,12 @@ var funcMap = template.FuncMap{
 	},
 	// deviceTypeText 设备类型展示名（设备管理页）。
 	"deviceTypeText": deviceTypeText,
+	// phoneGroupsJSON 把号码分组规则注入表单 JS（粘贴整号后失焦自动整理，
+	// 与表格展示同一套规则，避免两份规则表漂移）。
+	"phoneGroupsJSON": func() template.JS {
+		b, _ := json.Marshal(phoneGroupRules)
+		return template.JS(b)
+	},
 	// devColor 设备徽章取色：按 ID 稳定映射到 8 色色板（同一设备恒定同色）。
 	"devColor": func(id int64) int {
 		return int(((id % 8) + 8) % 8)

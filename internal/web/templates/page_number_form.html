@@ -79,7 +79,7 @@
                      placeholder="{{if $.Content.Country}}输入号码本体{{else}}先选择国家与地区{{end}}"
                      value="{{with $N}}{{phoneNational .}}{{end}}" required>
             </div>
-            <p class="hint" id="phone-hint">区号随国家与地区自动带入，只需填写号码本体</p>
+            <p class="hint" id="phone-hint">区号随国家与地区自动带入；粘贴带区号的整号也没关系，失焦后自动剥区号并分组</p>
           </div>
         </div>
         <div id="secondary-rows">
@@ -230,10 +230,46 @@
 
 <script>
 const SK_COUNTRIES = {{countryJSON .Content.Countries}};
+const SK_PHONE_GROUPS = {{phoneGroupsJSON}};
 (function () {
   const disp = document.getElementById('n-country'), code = document.getElementById('n-country-code'),
         list = document.getElementById('n-country-list'), prefix = document.getElementById('dial-prefix'),
         phone = document.getElementById('n-phone'), hint = document.getElementById('phone-hint');
+  // 粘贴整号（带区号/空格/横线）后失焦：剥掉区号并按国家规则分组回填，
+  // 与列表展示同一套规则（规则由服务端注入，见 SK_PHONE_GROUPS）。
+  function groupNational(nsn) {
+    const pat = SK_PHONE_GROUPS[code.value];
+    const parts = [];
+    let rest = nsn;
+    if (pat) {
+      for (let i = 0; i < pat.length && rest; i++) {
+        if (rest.length <= pat[i]) { parts.push(rest); rest = ''; break; }
+        parts.push(rest.slice(0, pat[i]));
+        rest = rest.slice(pat[i]);
+      }
+      if (rest) {
+        if (rest.length <= 2 && parts.length) parts[parts.length - 1] += rest;
+        else parts.push(rest);
+      }
+    } else {
+      const fb = { 7: [3, 4], 8: [4, 4], 9: [3, 3, 3], 10: [3, 3, 4], 11: [3, 4, 4], 12: [4, 4, 4] }[rest.length];
+      if (fb) { let off = 0; fb.forEach(function (g) { parts.push(rest.slice(off, off + g)); off += g; }); }
+      else { while (rest.length > 0) { parts.push(rest.slice(0, 3)); rest = rest.slice(3); } }
+    }
+    return parts.join(' ');
+  }
+  function normalizePhoneField() {
+    if (!code.value || !phone.value.trim()) return;
+    const c = SK_COUNTRIES.find(function (x) { return x.Code === code.value; });
+    if (!c) return;
+    const dial = String(c.Dial);
+    const digits = phone.value.replace(/\D/g, '');
+    if (!digits) return;
+    if (dial && digits.indexOf(dial) === 0) digits = digits.slice(dial.length);
+    if (!digits) { phone.value = ''; return; }
+    phone.value = groupNational(digits);
+  }
+  phone.addEventListener('blur', normalizePhoneField);
   function pick(cd) {
     const c = SK_COUNTRIES.find(function (x) { return x.Code === cd; });
     if (!c) return;
@@ -242,6 +278,7 @@ const SK_COUNTRIES = {{countryJSON .Content.Countries}};
     prefix.textContent = '+' + c.Dial;
     phone.placeholder = '输入号码本体（不含区号）';
     list.hidden = true;
+    normalizePhoneField();
   }
   function render(q) {
     q = (q || '').trim().toLowerCase();
