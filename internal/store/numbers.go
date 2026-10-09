@@ -18,9 +18,7 @@ type PhoneNumber struct {
 	CountryName          string
 	Carrier              string
 	ExpiryDate           string // YYYY-MM-DD
-	RechargeAmount       float64
-	RechargeCurrency     string
-	RenewalDaysBefore    int // 保号提醒提前天数（原续费/使用两类已合并为一类）
+	RenewalDaysBefore    int    // 保号提醒提前天数（原续费/使用两类已合并为一类）
 	AutoExpiryEnabled    bool
 	AutoStartDate        string
 	AutoExpiryPeriod     int // 90 | 180 | 365，0 表示未启用
@@ -43,8 +41,7 @@ type NumberRepo struct {
 	DB *db.DB
 }
 
-const numberCols = `id, user_id, phone_number, country_code, country_name, carrier, expiry_date,
-	recharge_amount, recharge_currency, renewal_days_before,
+const numberCols = `id, user_id, phone_number, country_code, country_name, carrier, expiry_date, renewal_days_before,
 	auto_expiry_enabled, auto_start_date, auto_expiry_period, auto_calculated_expiry,
 	status, notes, created_at, no_keepalive, plan_name, secondary_numbers,
 	sim_type, lpa_string, confirm_code, updated_at, device_id`
@@ -52,15 +49,13 @@ const numberCols = `id, user_id, phone_number, country_code, country_name, carri
 func scanNumber(scan interface{ Scan(...any) error }) (*PhoneNumber, error) {
 	var n PhoneNumber
 	var carrier, autoStart, autoCalc, notes sql.NullString
-	var amount sql.NullFloat64
 	var period sql.NullInt64
 	var noKeepalive int
 	var planName, secondary sql.NullString
 	var lpa, confirm sql.NullString
 	var deviceID sql.NullInt64
 	err := scan.Scan(&n.ID, &n.UserID, &n.PhoneNumber, &n.CountryCode, &n.CountryName,
-		&carrier, &n.ExpiryDate, &amount, &n.RechargeCurrency,
-		&n.RenewalDaysBefore,
+		&carrier, &n.ExpiryDate, &n.RenewalDaysBefore,
 		&n.AutoExpiryEnabled, &autoStart, &period, &autoCalc,
 		&n.Status, &notes, &n.CreatedAt, &noKeepalive, &planName, &secondary,
 		&n.SimType, &lpa, &confirm, &n.UpdatedAt, &deviceID)
@@ -74,9 +69,6 @@ func scanNumber(scan interface{ Scan(...any) error }) (*PhoneNumber, error) {
 	n.AutoStartDate = autoStart.String
 	n.AutoCalculatedExpiry = autoCalc.String
 	n.Notes = notes.String
-	if amount.Valid {
-		n.RechargeAmount = amount.Float64
-	}
 	if period.Valid {
 		n.AutoExpiryPeriod = int(period.Int64)
 	}
@@ -148,13 +140,13 @@ func (r *NumberRepo) Create(n *PhoneNumber) (int64, error) {
 	return r.DB.InsertID(
 		`INSERT INTO phone_numbers
 		 (user_id, phone_number, country_code, country_name, carrier, expiry_date,
-		  recharge_amount, recharge_currency, renewal_days_before,
+		  renewal_days_before,
 		  auto_expiry_enabled, auto_start_date, auto_expiry_period, auto_calculated_expiry,
 		  no_keepalive, plan_name, secondary_numbers, sim_type, lpa_string, confirm_code,
 		  device_id, status, notes)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		n.UserID, n.PhoneNumber, n.CountryCode, n.CountryName, nullStr(n.Carrier), n.ExpiryDate,
-		nullFloat(n.RechargeAmount), n.RechargeCurrency, n.RenewalDaysBefore,
+		n.RenewalDaysBefore,
 		boolInt(n.AutoExpiryEnabled), nullStr(n.AutoStartDate), nullInt(n.AutoExpiryPeriod),
 		nullStr(n.AutoCalculatedExpiry), boolInt(n.NoKeepalive),
 		nullStr(n.PlanName), nullStr(n.SecondaryNumbers), n.SimType, nullStr(n.LPAString), nullStr(n.ConfirmCode),
@@ -174,13 +166,13 @@ func (r *NumberRepo) Update(n *PhoneNumber) error {
 	_, err := r.DB.Exec(
 		`UPDATE phone_numbers SET
 		 phone_number=?, country_code=?, country_name=?, carrier=?, expiry_date=?,
-		 recharge_amount=?, recharge_currency=?, renewal_days_before=?,
+		 renewal_days_before=?,
 		 auto_expiry_enabled=?, auto_start_date=?, auto_expiry_period=?, auto_calculated_expiry=?,
 		 no_keepalive=?, plan_name=?, secondary_numbers=?, sim_type=?, lpa_string=?, confirm_code=?,
 		 device_id=?, status=?, notes=?, updated_at=?
 		 WHERE id=? AND user_id=?`,
 		n.PhoneNumber, n.CountryCode, n.CountryName, nullStr(n.Carrier), n.ExpiryDate,
-		nullFloat(n.RechargeAmount), n.RechargeCurrency, n.RenewalDaysBefore,
+		n.RenewalDaysBefore,
 		boolInt(n.AutoExpiryEnabled), nullStr(n.AutoStartDate), nullInt(n.AutoExpiryPeriod),
 		nullStr(n.AutoCalculatedExpiry), boolInt(n.NoKeepalive),
 		nullStr(n.PlanName), nullStr(n.SecondaryNumbers), n.SimType, nullStr(n.LPAString), nullStr(n.ConfirmCode),
@@ -286,8 +278,7 @@ func (r *NumberRepo) list(where string, args []any, page, limit int) ([]PhoneNum
 // 供定时任务在内存里按剩余天数过滤（数据量小，避免 SQLite 日期函数方言）。
 func (r *NumberRepo) ListExpiring() ([]PhoneNumber, error) {
 	q := `SELECT pn.id, pn.user_id, pn.phone_number, pn.country_code, pn.country_name, pn.carrier,
-		pn.expiry_date, pn.recharge_amount, pn.recharge_currency,
-		pn.renewal_days_before,
+		pn.expiry_date, pn.renewal_days_before,
 		pn.auto_expiry_enabled, pn.auto_start_date, pn.auto_expiry_period, pn.auto_calculated_expiry,
 		pn.status, pn.notes, pn.created_at, pn.no_keepalive, pn.plan_name, pn.secondary_numbers,
 		pn.sim_type, pn.lpa_string, pn.confirm_code, pn.updated_at, pn.device_id

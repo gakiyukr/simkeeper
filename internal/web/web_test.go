@@ -446,7 +446,7 @@ func TestBuildNumbersJSON(t *testing.T) {
 		{ID: 7, PhoneNumber: "+819012345678", CountryCode: "JP", CountryName: "日本",
 			Carrier: "KDDI", ExpiryDate: "2099-01-01", Status: "active", SimType: "esim",
 			LPAString: "LPA:1$rsp.example.com$ABCD", ConfirmCode: "654321",
-			SecondaryNumbers: "+819012345679", RechargeAmount: 3.5, RechargeCurrency: "JPY",
+			SecondaryNumbers:  "+819012345679",
 			AutoExpiryEnabled: true, AutoExpiryPeriod: 90,
 			CreatedAt: "2026-10-05 10:00:00", UpdatedAt: "2026-10-05 11:00:00"},
 		{ID: 8, PhoneNumber: "+8613800138000", CountryCode: "CN", CountryName: "中国",
@@ -468,7 +468,6 @@ func TestBuildNumbersJSON(t *testing.T) {
 			ConfirmationCode string   `json:"confirmationCode"`
 			CountryCode      string   `json:"countryCode"`
 			Flag             string   `json:"flag"`
-			Price            string   `json:"price"`
 			RenewDays        int      `json:"renewDays"`
 			RenewalUnit      string   `json:"renewalUnit"`
 			IsLongTerm       bool     `json:"isLongTerm"`
@@ -492,8 +491,8 @@ func TestBuildNumbersJSON(t *testing.T) {
 	if c.ActivationCode != "LPA:1$rsp.example.com$ABCD" || c.SMDPAddress != "rsp.example.com" || c.ConfirmationCode != "654321" {
 		t.Errorf("eSIM 激活信息映射不一致: %+v", c)
 	}
-	if c.Flag != "🇯🇵" || c.Price != "3.50 JPY" || c.RenewDays != 90 || c.RenewalUnit != "days" || !c.IsLongTerm {
-		t.Errorf("展示字段映射不一致: flag=%q price=%q renew=%d unit=%q long=%v", c.Flag, c.Price, c.RenewDays, c.RenewalUnit, c.IsLongTerm)
+	if c.Flag != "🇯🇵" || c.RenewDays != 90 || c.RenewalUnit != "days" || !c.IsLongTerm {
+		t.Errorf("展示字段映射不一致: flag=%q renew=%d unit=%q long=%v", c.Flag, c.RenewDays, c.RenewalUnit, c.IsLongTerm)
 	}
 	if c.SecondaryPhone != "+819012345679" || !c.SecondaryOn {
 		t.Errorf("副卡映射不一致: %q %v", c.SecondaryPhone, c.SecondaryOn)

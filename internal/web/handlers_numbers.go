@@ -599,11 +599,6 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	planName := strings.TrimSpace(r.PostFormValue("plan_name"))
 	carrier := strings.TrimSpace(r.PostFormValue("carrier"))
 	expiry := strings.TrimSpace(r.PostFormValue("expiry_date"))
-	amount, _ := strconv.ParseFloat(r.PostFormValue("recharge_amount"), 64)
-	currency := strings.TrimSpace(r.PostFormValue("recharge_currency"))
-	if currency == "" {
-		currency = "USD"
-	}
 	renewalDays := atoiDefault(r.PostFormValue("renewal_days_before"), 7)
 	notes := strings.TrimSpace(r.PostFormValue("notes"))
 	status := r.PostFormValue("status")
@@ -660,7 +655,6 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	submitted := &store.PhoneNumber{
 		UserID: userID, PhoneNumber: phone, CountryCode: countryCode, CountryName: countryName,
 		Carrier: carrier, ExpiryDate: expiry,
-		RechargeAmount: amount, RechargeCurrency: currency,
 		RenewalDaysBefore: renewalDays,
 		AutoExpiryEnabled: autoEnabled, AutoStartDate: autoStart,
 		AutoExpiryPeriod: autoPeriod, Status: status, Notes: notes,
@@ -748,7 +742,6 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	n := &store.PhoneNumber{
 		UserID: userID, PhoneNumber: phone, CountryCode: countryCode, CountryName: countryName,
 		Carrier: carrier, ExpiryDate: expiry,
-		RechargeAmount: amount, RechargeCurrency: currency,
 		RenewalDaysBefore: renewalDays,
 		AutoExpiryEnabled: autoEnabled, AutoStartDate: autoStart,
 		AutoExpiryPeriod: autoPeriod, Status: status, Notes: notes,

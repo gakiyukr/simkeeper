@@ -47,22 +47,12 @@
 
       <div class="sec">
         <h3 class="sec-title">方案信息</h3>
-        <p class="sec-sub">套餐名称与价格（可选，便于回顾当时办的是什么套餐）</p>
+        <p class="sec-sub">套餐名称（可选，便于回顾当时办的是什么套餐）</p>
         <div class="form-grid">
           <div class="field span2">
             <label class="label" for="n-plan">套餐名称</label>
             <input class="input" type="text" id="n-plan" name="plan_name" placeholder="例如：30 天不限流量方案"
                    value="{{with $N}}{{.PlanName}}{{end}}">
-          </div>
-          <div class="field">
-            <label class="label" for="n-amount">套餐价格</label>
-            <input class="input" type="number" step="0.01" min="0" id="n-amount" name="recharge_amount"
-                   value="{{with $N}}{{if gt .RechargeAmount 0.0}}{{.RechargeAmount}}{{end}}{{end}}">
-          </div>
-          <div class="field">
-            <label class="label" for="n-currency">币种</label>
-            <input class="input" type="text" id="n-currency" name="recharge_currency" maxlength="8"
-                   value="{{with $N}}{{.RechargeCurrency}}{{else}}USD{{end}}">
           </div>
         </div>
       </div>

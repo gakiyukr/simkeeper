@@ -103,11 +103,9 @@ type numberExport struct {
 	CountryCode                 string   `json:"countryCode"`
 	CountryName                 string   `json:"countryName"`
 	CreatedAt                   string   `json:"createdAt"`
-	CurrencyCode                string   `json:"currencyCode"`
 	CurrentBalance              string   `json:"currentBalance"`
 	CurrentBalanceMinorUnits    int      `json:"currentBalanceMinorUnits"`
 	CustomPrompt                string   `json:"customPrompt"`
-	CyclePaymentMinorUnits      int      `json:"cyclePaymentMinorUnits"`
 	EID                         string   `json:"eid"`
 	ExpiryDate                  string   `json:"expiryDate"`
 	Flag                        string   `json:"flag"`
@@ -117,7 +115,6 @@ type numberExport struct {
 	OrderIndex                  int      `json:"orderIndex"`
 	PhoneNumber                 string   `json:"phoneNumber"`
 	Plan                        string   `json:"plan"`
-	Price                       string   `json:"price"`
 	RenewDays                   int      `json:"renewDays"`
 	RenewalIntervalValue        int      `json:"renewalIntervalValue"`
 	RenewalUnit                 string   `json:"renewalUnit"`
@@ -190,10 +187,6 @@ func buildNumbersJSON(now time.Time, numbers []store.PhoneNumber) ([]byte, error
 				secondary = append(secondary, line)
 			}
 		}
-		price := ""
-		if n.RechargeAmount > 0 {
-			price = strconv.FormatFloat(n.RechargeAmount, 'f', 2, 64) + " " + n.RechargeCurrency
-		}
 		cards = append(cards, numberExport{
 			ActivationCode:              n.LPAString,
 			Carrier:                     n.Carrier,
@@ -202,8 +195,6 @@ func buildNumbersJSON(now time.Time, numbers []store.PhoneNumber) ([]byte, error
 			CountryCode:                 n.CountryCode,
 			CountryName:                 n.CountryName,
 			CreatedAt:                   rfc3339(n.CreatedAt),
-			CurrencyCode:                n.RechargeCurrency,
-			CyclePaymentMinorUnits:      int(n.RechargeAmount*100 + 0.5),
 			ExpiryDate:                  rfc3339(n.ExpiryDate),
 			Flag:                        flagEmoji(n.CountryCode),
 			ID:                          uuidFromID(n.ID),
@@ -211,7 +202,6 @@ func buildNumbersJSON(now time.Time, numbers []store.PhoneNumber) ([]byte, error
 			OrderIndex:                  i,
 			PhoneNumber:                 formatPhoneCC(n.CountryCode, n.PhoneNumber),
 			Plan:                        n.PlanName,
-			Price:                       price,
 			RenewDays:                   n.AutoExpiryPeriod,
 			RenewalIntervalValue:        n.AutoExpiryPeriod,
 			RenewalUnit:                 "days",
@@ -275,11 +265,10 @@ func (a *App) HandleAdminExport(w http.ResponseWriter, r *http.Request) {
 		var b strings.Builder
 		// UTF-8 BOM：让 Excel 正确识别中文
 		b.WriteString("\xef\xbb\xbf")
-		b.WriteString("号码,国家代码,国家,运营商,到期日,剩余天数,状态,充值金额,币种\n")
+		b.WriteString("号码,国家代码,国家,运营商,到期日,剩余天数,状态\n")
 		for _, n := range numbers {
 			b.WriteString(csvRow(n.PhoneNumber, n.CountryCode, n.CountryName, n.Carrier,
-				n.ExpiryDate, strconv.Itoa(n.DaysLeft(now)), n.Status,
-				strconv.FormatFloat(n.RechargeAmount, 'f', -1, 64), n.RechargeCurrency))
+				n.ExpiryDate, strconv.Itoa(n.DaysLeft(now)), n.Status))
 		}
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 		w.Header().Set("Content-Disposition", "attachment; filename="+name+".csv")

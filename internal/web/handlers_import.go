@@ -151,7 +151,6 @@ type simhubCard struct {
 	ConfirmationCode     string `json:"confirmationCode"`
 	Plan                 string `json:"plan"`
 	TransactionNotes     string `json:"transactionNotes"`
-	Price                string `json:"price"`
 	RenewDays            int    `json:"renewDays"`
 	IsLongTerm           bool   `json:"isLongTerm"`
 	SecondaryPhoneNumber string `json:"secondaryPhoneNumber"`
@@ -196,14 +195,6 @@ func simhubCardToNumber(c simhubCard) (store.PhoneNumber, string) {
 	n.NoKeepalive = !c.IsLongTerm
 	n.AutoExpiryEnabled = c.RenewDays > 0
 	n.AutoExpiryPeriod = c.RenewDays
-	if f := strings.Fields(c.Price); len(f) == 2 {
-		if v, err := strconv.ParseFloat(f[0], 64); err == nil && v >= 0 {
-			n.RechargeAmount, n.RechargeCurrency = v, f[1]
-		}
-	}
-	if n.RechargeCurrency == "" {
-		n.RechargeCurrency = "USD"
-	}
 	if s := strings.TrimSpace(c.SecondaryPhoneNumber); s != "" {
 		n.SecondaryNumbers = s
 	}
@@ -284,18 +275,14 @@ func (a *App) importNumbersFromCSV(userID int64, raw []byte) (created, updated, 
 			skipped++
 			continue
 		}
-		amount, _ := strconv.ParseFloat(at("充值金额"), 64)
 		n := store.PhoneNumber{
 			PhoneNumber: phone, CountryCode: cc, CountryName: name,
 			Carrier: at("运营商"), ExpiryDate: expiry,
-			Status: at("状态"), RechargeAmount: amount, RechargeCurrency: at("币种"),
+			Status:            at("状态"),
 			RenewalDaysBefore: 7, SimType: "physical",
 		}
 		if n.Status != "inactive" {
 			n.Status = "active"
-		}
-		if n.RechargeCurrency == "" {
-			n.RechargeCurrency = "USD"
 		}
 		existing, e := a.Numbers.ByPhone(userID, phone)
 		if e != nil {

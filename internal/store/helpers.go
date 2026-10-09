@@ -11,13 +11,6 @@ func nullStr(s string) any {
 	return s
 }
 
-func nullFloat(f float64) any {
-	if f == 0 {
-		return nil
-	}
-	return f
-}
-
 func nullInt(i int) any {
 	if i == 0 {
 		return nil
