@@ -305,14 +305,11 @@ func normalizePhone(raw string) string {
 	return s
 }
 
-// DashPage 首页数据：统计 + 完整号码管理（分类/搜索/排序/分页）+ 最近通知。
+// DashPage 首页数据：统计 + 完整号码管理（分类/搜索/排序）+ 最近通知。
 type DashPage struct {
-	Numbers      []store.PhoneNumber // 当前分类+搜索+排序+分页后的号码
+	Numbers      []store.PhoneNumber // 当前分类+搜索+排序后的全部号码（不分页）
 	DeviceNames  map[int64]string    // 已登记设备（号码表显示安装位置）
-	Total        int                 // 过滤后的号码数（分页用）
 	TotalAll     int                 // 全部号码数（页头展示）
-	Page         int
-	Pages        int
 	Search       string
 	Cat          string
 	Sort         string
@@ -353,23 +350,6 @@ func (a *App) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	filtered := filterSortNumbers(all, q, cat, sortKey)
-	total := len(filtered)
-	pageNum := atoiDefault(r.URL.Query().Get("page"), 1)
-	pages := (total + 19) / 20
-	if pages < 1 {
-		pages = 1
-	}
-	if pageNum < 1 {
-		pageNum = 1
-	}
-	if pageNum > pages {
-		pageNum = pages
-	}
-	start := (pageNum - 1) * 20
-	end := start + 20
-	if end > total {
-		end = total
-	}
 	recent, _, _ := a.Notify.ListForUser(u.ID, 1, 5)
 	deviceNames := map[int64]string{}
 	if devices, err := a.Devices.ListForUser(u.ID); err == nil {
@@ -378,8 +358,8 @@ func (a *App) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	d.Content = DashPage{
-		Numbers: filtered[start:end], Total: total, TotalAll: len(all),
-		Page: pageNum, Pages: pages, Search: q, Cat: cat, Sort: sortKey,
+		Numbers: filtered, TotalAll: len(all),
+		Search: q, Cat: cat, Sort: sortKey,
 		Counts: counts, Expiring7: expiring7, ActiveCnt: activeCnt,
 		RecentNotifs: recent, DeviceNames: deviceNames,
 	}

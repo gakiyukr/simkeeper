@@ -414,3 +414,40 @@ func TestHTTPNumberPastedFullNumber(t *testing.T) {
 		t.Errorf("号码 = %q, want %q", n.PhoneNumber, "+819012345678")
 	}
 }
+
+// TestHTTPDashboardShowsAllNumbers 回归：号码列表不分页，超过旧版每页 20 条时
+// 也必须一次全部渲染，且页面不再出现分页控件。
+func TestHTTPDashboardShowsAllNumbers(t *testing.T) {
+	a := integrationApp(t)
+	mustAdmin(t, a)
+	const total = 25
+	for i := 1; i <= total; i++ {
+		if _, err := a.Numbers.Create(&store.PhoneNumber{
+			UserID: 1, PhoneNumber: fmt.Sprintf("+8190%08d", i), CountryCode: "JP",
+			CountryName: "日本", Carrier: fmt.Sprintf("Carrier%02d", i),
+			ExpiryDate: "2099-01-01", Status: "active", RenewalDaysBefore: 7,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	srv, c := newTestServer(t, a)
+	loginAdmin(t, c, srv.URL)
+
+	resp, err := c.Get(srv.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	html := string(raw)
+	for i := 1; i <= total; i++ {
+		if !strings.Contains(html, fmt.Sprintf("Carrier%02d", i)) {
+			t.Errorf("号码列表未展示第 %d 条（应一次展示全部 %d 条）", i, total)
+		}
+	}
+	for _, pager := range []string{"下一页", "上一页", "page="} {
+		if strings.Contains(html, pager) {
+			t.Errorf("号码列表不应再有分页控件 %q", pager)
+		}
+	}
+}

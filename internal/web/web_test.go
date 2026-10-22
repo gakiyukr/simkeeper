@@ -194,7 +194,7 @@ func TestDashboardTemplateRenders(t *testing.T) {
 					Carrier: "Mystery Telecom", ExpiryDate: "2099-01-01", Status: "active",
 					RenewalDaysBefore: 7},
 			},
-			TotalAll: 2, Total: 2, Page: 1, Pages: 1,
+			TotalAll: 2,
 		},
 	}
 	var buf strings.Builder
