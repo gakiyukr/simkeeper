@@ -190,6 +190,11 @@ func (d *DB) relaxPeriodCheck() error {
 
 // relaxPeriodCheckSQLite 在专用连接上按标准流程重建表：
 // PRAGMA 是连接级设置，必须与重建语句同连接执行。
+//
+// 重建 DDL 直接取自内嵌 schema，列集合由两表实际列动态取交集——
+// 不要把列名写死，否则后续给 phone_numbers 加列后，跳版升级的旧库
+// 会在重建时丢掉这些列（曾发生：device_id / sim_type / lpa_string /
+// confirm_code 被重建吞掉）。整个重建包在事务里，失败回滚保留旧表。
 func (d *DB) relaxPeriodCheckSQLite() error {
 	var tableSQL string
 	if err := d.DB.QueryRow(
@@ -199,6 +204,10 @@ func (d *DB) relaxPeriodCheckSQLite() error {
 	}
 	if !strings.Contains(tableSQL, "IN (90, 180, 365)") {
 		return nil // 已是新约束（或无约束），无需重建
+	}
+	newDDL, err := sqlitePhoneNumbersRebuildDDL()
+	if err != nil {
+		return err
 	}
 	ctx := context.Background()
 	conn, err := d.DB.Conn(ctx)
@@ -217,95 +226,84 @@ func (d *DB) relaxPeriodCheckSQLite() error {
 	if err := exec(`PRAGMA foreign_keys = OFF`); err != nil {
 		return err
 	}
-	defer exec(`PRAGMA foreign_keys = ON`) // best effort 恢复
+	defer func() { _ = exec(`PRAGMA foreign_keys = ON`) }() // best effort 恢复
 
-	// 新表定义与 schema_sqlite.sql 保持一致，仅 CHECK 放宽
-	newDDL := `CREATE TABLE phone_numbers_new (
-    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id               INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    phone_number          TEXT    NOT NULL,
-    country_code          TEXT    NOT NULL,
-    country_name          TEXT    NOT NULL,
-    carrier               TEXT,
-    expiry_date           TEXT    NOT NULL,
-    recharge_amount       REAL,
-    recharge_currency     TEXT    NOT NULL DEFAULT 'USD',
-    renewal_days_before   INTEGER NOT NULL DEFAULT 7,
-    auto_expiry_enabled   INTEGER NOT NULL DEFAULT 0,
-    auto_start_date       TEXT,
-    auto_expiry_period    INTEGER CHECK (auto_expiry_period IS NULL OR auto_expiry_period BETWEEN 1 AND 3650),
-    auto_calculated_expiry TEXT,
-    no_keepalive          INTEGER NOT NULL DEFAULT 0,
-    plan_name             TEXT,
-    secondary_numbers     TEXT,
-    status                TEXT    NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
-    notes                 TEXT,
-    created_at            TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
-    updated_at            TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
-)`
+	if err := exec(`BEGIN IMMEDIATE`); err != nil {
+		return err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = exec(`ROLLBACK`)
+		}
+	}()
+
 	if err := exec(`DROP TABLE IF EXISTS phone_numbers_new`); err != nil {
 		return err // 兼容上次重建中途失败留下的残留表
 	}
 	if err := exec(newDDL); err != nil {
 		return err
 	}
-	// 交集列拷贝：以新表列为准 ∩ 旧表现有列（EnsureColumns 已先补齐旧库列）
-	newCols := map[string]bool{}
-	rows, err := conn.QueryContext(ctx, `PRAGMA table_info(phone_numbers_new)`)
-	if err != nil {
-		return err
-	}
-	for rows.Next() {
-		var cid int
-		var name, ctype string
-		var notNull, pk int
-		var dflt any
-		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
-			rows.Close()
-			return err
-		}
-		newCols[name] = true
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return err
-	}
 	// 注意：SQLite 池为单连接，专用连接被本函数持有时，池上的查询会死锁，
-	// 因此旧表列信息也必须走同一专用连接。
-	oldCols := map[string]bool{}
-	rows, err = conn.QueryContext(ctx, `PRAGMA table_info(phone_numbers)`)
+	// 因此两表的列信息也必须走同一专用连接。
+	columns := func(table string) ([]string, error) {
+		rows, err := conn.QueryContext(ctx, `PRAGMA table_info(`+table+`)`)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		var out []string
+		for rows.Next() {
+			var cid int
+			var name, ctype string
+			var notNull, pk int
+			var dflt any
+			if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
+				return nil, err
+			}
+			out = append(out, name)
+		}
+		return out, rows.Err()
+	}
+	newCols, err := columns("phone_numbers_new")
 	if err != nil {
 		return err
 	}
-	for rows.Next() {
-		var cid int
-		var name, ctype string
-		var notNull, pk int
-		var dflt any
-		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
-			rows.Close()
-			return err
-		}
+	oldColsList, err := columns("phone_numbers")
+	if err != nil {
+		return err
+	}
+	oldCols := make(map[string]bool, len(oldColsList))
+	for _, name := range oldColsList {
 		oldCols[name] = true
 	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return err
-	}
+	// 以新表列顺序为准取交集（EnsureColumns 已先补齐旧库列）
 	var cols []string
-	for _, name := range []string{"id", "user_id", "phone_number", "country_code", "country_name", "carrier",
-		"expiry_date", "recharge_amount", "recharge_currency", "renewal_days_before", "usage_days_before",
-		"auto_expiry_enabled", "auto_start_date", "auto_expiry_period", "auto_calculated_expiry",
-		"status", "notes", "created_at", "updated_at", "no_keepalive",
-		"plan_name", "secondary_numbers"} {
-		if newCols[name] && oldCols[name] {
+	for _, name := range newCols {
+		if oldCols[name] {
 			cols = append(cols, name)
 		}
+	}
+	if len(cols) == 0 {
+		return fmt.Errorf("重建 phone_numbers 失败：新旧表没有可拷贝的公共列")
+	}
+
+	var oldCount int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM phone_numbers`).Scan(&oldCount); err != nil {
+		return err
 	}
 	if err := exec(`INSERT INTO phone_numbers_new (` + strings.Join(cols, ", ") + `)
 	                SELECT ` + strings.Join(cols, ", ") + ` FROM phone_numbers`); err != nil {
 		return err
 	}
+	var newCount int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM phone_numbers_new`).Scan(&newCount); err != nil {
+		return err
+	}
+	if newCount != oldCount {
+		return fmt.Errorf("重建 phone_numbers 行数不一致：旧表 %d 行，新表 %d 行", oldCount, newCount)
+	}
+
 	if err := exec(`DROP TABLE phone_numbers`); err != nil {
 		return err
 	}
@@ -321,5 +319,23 @@ func (d *DB) relaxPeriodCheckSQLite() error {
 			return err
 		}
 	}
+	if err := exec(`COMMIT`); err != nil {
+		return err
+	}
+	committed = true
 	return nil
+}
+
+// sqlitePhoneNumbersRebuildDDL 从内嵌 schema 提取 phone_numbers 建表语句，
+// 仅把表名改成临时表名。列定义与 schema_sqlite.sql 保持单一来源，
+// 避免重建表时漏掉后续新增的列。
+func sqlitePhoneNumbersRebuildDDL() (string, error) {
+	const prefix = "CREATE TABLE IF NOT EXISTS phone_numbers"
+	for _, stmt := range splitStatements(schemaSQLite) {
+		if i := strings.Index(stmt, prefix); i >= 0 {
+			ddl := strings.TrimSpace(stmt[i:])
+			return strings.Replace(ddl, prefix, "CREATE TABLE phone_numbers_new", 1), nil
+		}
+	}
+	return "", fmt.Errorf("schema_sqlite.sql 中缺少 phone_numbers 建表语句")
 }
