@@ -388,3 +388,29 @@ func TestHTTPNumberLastKeepaliveMode(t *testing.T) {
 			n.ExpiryDate, want, n.AutoStartDate, last)
 	}
 }
+
+// TestHTTPNumberPastedFullNumber 回归：前端未执行 blur 正規化（或 JS 关闭）时，
+// 直接提交带 + 的完整国际号码也应创建成功，且只保留一个 + 与国家码。
+func TestHTTPNumberPastedFullNumber(t *testing.T) {
+	a := integrationApp(t)
+	mustAdmin(t, a)
+	srv, c := newTestServer(t, a)
+	loginAdmin(t, c, srv.URL)
+
+	tok := getCSRF(t, c, srv.URL, "/numbers/new")
+	code, body := postForm(t, c, srv.URL, "/numbers/new", url.Values{
+		"country_code": {"JP"}, "phone_national": {"+81 90-1234-5678"}, "carrier": {"KDDI"},
+		"expiry_date": {"2099-01-01"}, "auto_expiry_period": {"90"}, "keepalive_mode": {"keep"},
+		"renewal_days_before": {"7"}, "csrf_token": {tok},
+	})
+	if code != 303 {
+		t.Fatalf("粘贴完整号码应创建成功并 303, got %d %s", code, body)
+	}
+	n, err := a.Numbers.ByPhone(1, "+819012345678")
+	if err != nil {
+		t.Fatalf("号码未按预期保存: %v", err)
+	}
+	if n.PhoneNumber != "+819012345678" {
+		t.Errorf("号码 = %q, want %q", n.PhoneNumber, "+819012345678")
+	}
+}

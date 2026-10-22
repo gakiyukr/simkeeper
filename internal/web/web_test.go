@@ -427,7 +427,7 @@ func TestSecureHeaders(t *testing.T) {
 // TestCSVFormulaInjection 公式注入：= + - @ 开头前置单引号，Excel 按文本展示；
 // 普通数字不加前缀。
 func TestCSVFormulaInjection(t *testing.T) {
-	for _, dangerous := range []string{"=cmd()", "+8613800138000", "-1+1", "@x"} {
+	for _, dangerous := range []string{"=cmd()", "+8613800138000", "-1+1", "@x", "\t=cmd()"} {
 		got := csvRow(dangerous)
 		if !strings.HasPrefix(got, "'") {
 			t.Errorf("%q 应前置单引号防公式注入, got %q", dangerous, got)
@@ -435,6 +435,37 @@ func TestCSVFormulaInjection(t *testing.T) {
 	}
 	if got := csvRow("13800138000"); strings.Contains(got, "'") {
 		t.Errorf("普通数字不应加前缀, got %q", got)
+	}
+
+	// 回归：含逗号/引号的公式字段。旧实现先加引号包裹再判断首字符，
+	// 首字符变成 '"' 导致防护被跳过；单引号必须在 quoting 之前加。
+	got := csvRow(`=HYPERLINK("https://example.com","click")`)
+	if !strings.HasPrefix(got, `"'=HYPERLINK(`) {
+		t.Errorf("含逗号的公式字段仍应前置单引号, got %q", got)
+	}
+	if !strings.Contains(got, `""https://example.com""`) {
+		t.Errorf("字段内的引号应转义为双引号, got %q", got)
+	}
+}
+
+// TestNationalFromInput 回归：粘贴完整国际号码时按精确区号剥前缀，
+// 不能像 TrimLeft 那样把号码本体开头的数字一并吃掉；也不能再补一个 +。
+func TestNationalFromInput(t *testing.T) {
+	cases := []struct{ dial, in, want string }{
+		{"86", "+86 138 0013 8000", "13800138000"},
+		{"86", "13800138000", "13800138000"},
+		{"86", "8613800138000", "13800138000"},
+		{"852", "+852 5123 4567", "51234567"},  // TrimLeft("85251234567", "852") 会多吃一个 5
+		{"66", "+66 6 1234 5678", "612345678"}, // TrimLeft 会把号码本体的开头 6 也吃掉
+		{"65", "6591234567", "91234567"},
+		{"1", "+1 (415) 555-2671", "4155552671"},
+		{"", "+852 9123 4567", "85291234567"},
+		{"81", "  ", ""},
+	}
+	for _, c := range cases {
+		if got := nationalFromInput(c.dial, c.in); got != c.want {
+			t.Errorf("nationalFromInput(%q, %q) = %q, want %q", c.dial, c.in, got, c.want)
+		}
 	}
 }
 

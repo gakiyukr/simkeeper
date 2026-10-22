@@ -277,6 +277,18 @@ func fallbackPattern(n int) []int {
 	return p
 }
 
+// nationalFromInput 从主号输入提取号码本体（不含国际区号），只保留数字。
+// 支持带 + 的完整国际号码、省略 + 的「区号+号码」以及纯号码本体：
+// 剥区号必须用精确前缀 TrimPrefix，不能用 TrimLeft——后者按字符集合逐字符
+// 剔除，会把号码本体开头恰好属于区号字符的数字一起吃掉（例如 +852 5123…）。
+func nationalFromInput(dial, raw string) string {
+	digits := digitsOnly(strings.TrimSpace(raw))
+	if digits == "" {
+		return ""
+	}
+	return strings.TrimPrefix(digits, dial)
+}
+
 // normalizePhone 规范化手机号：去空白与分隔符，缺 + 自动补（与 PHP 版 formatPhoneNumber 一致）。
 func normalizePhone(raw string) string {
 	var b strings.Builder
@@ -580,13 +592,9 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	countryCode := strings.TrimSpace(r.PostFormValue("country_code"))
 	countryName := countryNameByCode(countryCode)
 	dial := countryDialByCode(countryCode)
-	// 主号：用户只填号码本体，区号按所选国家自动带上；粘贴了带区号的完整号码则不重复拼接
-	national := strings.TrimSpace(r.PostFormValue("phone_national"))
-	if strings.HasPrefix(national, "+") {
-		national = "+" + strings.TrimLeft(national[1:], dial) // 粘贴整号：剥掉区号避免重复
-	} else if dial != "" && strings.HasPrefix(national, dial) {
-		national = strings.TrimPrefix(national, dial)
-	}
+	// 主号：用户只填号码本体，区号按所选国家自动带上；粘贴带区号的完整号码时
+	// 按精确前缀剥掉区号，再把唯一一个 + 与区号拼回去，避免出现 "++区号"。
+	national := nationalFromInput(dial, r.PostFormValue("phone_national"))
 	phone := normalizePhone("+" + dial + national)
 	// 副卡：多行自由录入（不带区号），空行忽略
 	var secondaries []string
@@ -934,17 +942,22 @@ func daysBadge(days int) string {
 	}
 }
 
-// csvRow 拼 CSV 行并转义：含逗号/引号的字段加引号包裹；以 = + - @ 开头的
-// 字段前置单引号，防止 Excel/LibreOffice 把单元格当公式执行（公式注入）。
+// csvRow 拼 CSV 行并转义：含逗号/引号/换行的字段加引号包裹；以 = + - @ 或
+// 制表符/回车开头的字段前置单引号，防止 Excel/LibreOffice 把单元格当公式执行
+// （公式注入）。前置单引号必须在加引号之前判断——先包裹再判断会让首字符变成
+// 引号，含逗号的公式字段就绕过了防护。
 // 号码列普遍以 + 开头，前置 ' 后 Excel 会按文本展示、加号不再被吃掉。
 func csvRow(fields ...string) string {
 	out := make([]string, len(fields))
 	for i, f := range fields {
-		if strings.ContainsAny(f, ",\"\n") {
-			f = `"` + strings.ReplaceAll(f, `"`, `""`) + `"`
+		if len(f) > 0 {
+			switch f[0] {
+			case '=', '+', '-', '@', '\t', '\r':
+				f = "'" + f
+			}
 		}
-		if len(f) > 0 && (f[0] == '=' || f[0] == '+' || f[0] == '-' || f[0] == '@') {
-			f = "'" + f
+		if strings.ContainsAny(f, ",\"\r\n") {
+			f = `"` + strings.ReplaceAll(f, `"`, `""`) + `"`
 		}
 		out[i] = f
 	}
