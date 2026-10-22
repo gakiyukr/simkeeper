@@ -192,7 +192,7 @@ func TestNotificationLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 当天去重：需以号码维度查询（先建一个号码占位）
+	// 最近提醒时间：需以号码维度查询（先建一个号码占位）
 	nr := &NumberRepo{DB: h}
 	numID, err := nr.Create(&PhoneNumber{
 		UserID: uid, PhoneNumber: "+85266000000", CountryCode: "HK", CountryName: "香港",
@@ -204,12 +204,20 @@ func TestNotificationLifecycle(t *testing.T) {
 	if _, err := h.Exec(`UPDATE notifications SET phone_number_id = ? WHERE id = ?`, numID, id); err != nil {
 		t.Fatal(err)
 	}
-	done, err := r.HasNotificationToday(numID, "renewal", now)
+	// 最近一次提醒时间：用于重复提醒间隔判断
+	last, err := r.LastNotificationAt(numID, "renewal")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !done {
-		t.Error("同号码同类型当天应视为已发送")
+	var wantLast string
+	if err := h.QueryRow(`SELECT created_at FROM notifications WHERE id = ?`, id).Scan(&wantLast); err != nil {
+		t.Fatal(err)
+	}
+	if last != wantLast {
+		t.Errorf("LastNotificationAt = %q, want %q", last, wantLast)
+	}
+	if last, _ := r.LastNotificationAt(numID, "test"); last != "" {
+		t.Errorf("没有对应类型记录时应返回空串, got %q", last)
 	}
 
 	// 重投查询：失败且未超期应命中
@@ -361,6 +369,59 @@ func TestNumberMarkRenewed(t *testing.T) {
 	// 他人调用不得命中（归属校验）
 	if n, err := r.MarkRenewed(numID, uid+999, "2027-01-01", "2026-10-04"); err != nil || n != 0 {
 		t.Fatalf("非归属用户应 0 行命中, got %d, err %v", n, err)
+	}
+}
+
+// TestNumberReminderInterval 重复提醒间隔：往返保留、0 归一为 1、
+// ListExpiring 列集一致（定时任务读取的就是这个值）。
+func TestNumberReminderInterval(t *testing.T) {
+	h := testDB(t)
+	r := &NumberRepo{DB: h}
+	uid := mustUser(t, &UserRepo{DB: h}, "interval", "user")
+
+	id, err := r.Create(&PhoneNumber{
+		UserID: uid, PhoneNumber: "+819011111111", CountryCode: "JP", CountryName: "日本",
+		ExpiryDate: "2099-01-01", Status: "active",
+		RenewalDaysBefore: 30, ReminderIntervalDays: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := r.ByID(id, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RenewalDaysBefore != 30 || got.ReminderIntervalDays != 3 {
+		t.Fatalf("提醒窗口/重复间隔未往返保留: %+v", got)
+	}
+
+	defaultID, err := r.Create(&PhoneNumber{
+		UserID: uid, PhoneNumber: "+819022222222", CountryCode: "JP", CountryName: "日本",
+		ExpiryDate: "2099-01-01", Status: "active", RenewalDaysBefore: 7,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	def, _ := r.ByID(defaultID, uid)
+	if def.ReminderIntervalDays != 1 {
+		t.Errorf("未设置时默认应为 1 天, got %d", def.ReminderIntervalDays)
+	}
+
+	nums, err := r.ListExpiring()
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, n := range nums {
+		if n.ID == id {
+			found = true
+			if n.ReminderIntervalDays != 3 {
+				t.Errorf("ListExpiring 未带出重复间隔: %d", n.ReminderIntervalDays)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("ListExpiring 应包含新建号码")
 	}
 }
 

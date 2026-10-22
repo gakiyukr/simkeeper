@@ -93,13 +93,19 @@
 
       <div class="sec">
         <h3 class="sec-title">提醒窗口</h3>
-        <p class="sec-sub">到期前按此天数推送一条保号提醒，每个号码独立设置（1-90 天）</p>
+        <p class="sec-sub">进入窗口后每 N 天提醒一次，直到完成续费或号码过期</p>
         <div class="form-grid">
           <div class="field">
             <label class="label" for="n-renewal">保号提醒提前天数</label>
             <input class="input" type="number" min="1" max="90" id="n-renewal" name="renewal_days_before"
                    value="{{with $N}}{{.RenewalDaysBefore}}{{else}}7{{end}}">
-            <p class="hint">默认 7 天；只提示「该手动保号了」，按你的运营商规则操作即可</p>
+            <p class="hint">默认 7 天；进入提醒窗口的起点（1-90 天）</p>
+          </div>
+          <div class="field">
+            <label class="label" for="n-interval">重复提醒间隔（天）</label>
+            <input class="input" type="number" min="1" max="90" id="n-interval" name="reminder_interval_days"
+                   value="{{with $N}}{{if gt .ReminderIntervalDays 0}}{{.ReminderIntervalDays}}{{else}}1{{end}}{{else}}1{{end}}">
+            <p class="hint">默认 1（每天）；不能大于提醒提前天数，到期日离开提醒窗口后停止</p>
           </div>
         </div>
       </div>
@@ -345,6 +351,7 @@ const SK_PHONE_GROUPS = {{phoneGroupsJSON}};
         last = document.getElementById('n-lastkeep'),
         period = document.getElementById('n-autoperiod'),
         remind = document.getElementById('n-renewal'),
+        interval = document.getElementById('n-interval'),
         fieldLast = document.getElementById('field-last'),
         fieldExpiry = document.getElementById('field-expiry'),
         out = document.getElementById('expiry-preview');
@@ -380,6 +387,10 @@ const SK_PHONE_GROUPS = {{phoneGroupsJSON}};
     const n = parseInt(remind.value, 10);
     return n >= 1 ? n : 7;
   }
+  function intervalDays() {
+    const n = parseInt(interval.value, 10);
+    return n >= 1 ? n : 1;
+  }
   function effectiveExpiry() {
     if (currentDateMode() === 'last') return periodDays() ? shift(last.value, periodDays()) : '';
     return expiry.value;
@@ -392,6 +403,8 @@ const SK_PHONE_GROUPS = {{phoneGroupsJSON}};
     fieldExpiry.hidden = !keep || m !== 'expiry';
     last.required = keep && m === 'last';
     expiry.required = keep && m === 'expiry';
+    // 重复提醒间隔不能大于提醒提前天数（服务端同样校验）
+    interval.max = String(remindDays());
     markChips();
     preview();
   }
@@ -412,7 +425,7 @@ const SK_PHONE_GROUPS = {{phoneGroupsJSON}};
     const rd = remindDays();
     const today = new Date(); today.setHours(0, 0, 0, 0);
     let text = '到期：' + fmtCN(eff) + ' · 周期起点：' + fmtCN(start) +
-      ' · 保号提醒：' + fmtCN(shift(eff, -rd)) + '（提前 ' + rd + ' 天）' +
+      ' · 保号提醒：' + fmtCN(shift(eff, -rd)) + '（提前 ' + rd + ' 天，每 ' + intervalDays() + ' 天重复）' +
       ' · 每 ' + p + ' 天，点「已续费」后顺延一个周期';
     if (new Date(eff + 'T00:00:00') < today) text += ' · ⚠ 按此推算号码已过期';
     out.textContent = text;
@@ -432,9 +445,17 @@ const SK_PHONE_GROUPS = {{phoneGroupsJSON}};
       refresh();
     });
   });
-  [expiry, last, period, remind].forEach(function (el) {
-    el.addEventListener('change', function () { markChips(); preview(); });
-    el.addEventListener('input', function () { markChips(); preview(); });
+  [expiry, last, period, remind, interval].forEach(function (el) {
+    el.addEventListener('change', function () {
+      interval.max = String(remindDays());
+      markChips();
+      preview();
+    });
+    el.addEventListener('input', function () {
+      interval.max = String(remindDays());
+      markChips();
+      preview();
+    });
   });
   refresh();
 })();

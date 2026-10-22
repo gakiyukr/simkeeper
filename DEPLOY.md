@@ -51,7 +51,7 @@ sudo chown -R simkeeper:simkeeper /var/lib/simkeeper
 
 ## 3. 时区（重要，先做）
 
-提醒的「当天」判断依赖**进程的本地时区**。时区不对，提醒窗口会错位（最多一整天），当天去重也会跟着错。
+提醒的「当天」判断依赖**进程的本地时区**。时区不对，提醒窗口与重复提醒的日期判断会错位（最多一整天）。
 
 ```bash
 sudo timedatectl set-timezone Asia/Shanghai   # 换成你的时区

@@ -36,6 +36,7 @@ var notificationConfigColumns = []ColumnSpec{
 
 // phoneNumberColumns phone_numbers 表的历史演进列。
 var phoneNumberColumns = []ColumnSpec{
+	{Name: "reminder_interval_days", SQLiteType: "INTEGER NOT NULL DEFAULT 1", MySQLType: "INT NOT NULL DEFAULT 1", PGType: "INT NOT NULL DEFAULT 1"},
 	{Name: "no_keepalive", SQLiteType: "INTEGER NOT NULL DEFAULT 0", MySQLType: "TINYINT NOT NULL DEFAULT 0", PGType: "INT NOT NULL DEFAULT 0"},
 	{Name: "plan_name", SQLiteType: "TEXT", MySQLType: "TEXT", PGType: "TEXT"},
 	{Name: "secondary_numbers", SQLiteType: "TEXT", MySQLType: "TEXT", PGType: "TEXT"},

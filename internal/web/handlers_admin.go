@@ -116,6 +116,8 @@ type numberExport struct {
 	PhoneNumber                 string   `json:"phoneNumber"`
 	Plan                        string   `json:"plan"`
 	RenewDays                   int      `json:"renewDays"`
+	RenewalDaysBefore           int      `json:"renewalDaysBefore,omitempty"`    // 本程序扩展：提醒窗口
+	ReminderIntervalDays        int      `json:"reminderIntervalDays,omitempty"` // 本程序扩展：重复提醒间隔
 	RenewalIntervalValue        int      `json:"renewalIntervalValue"`
 	RenewalUnit                 string   `json:"renewalUnit"`
 	SecondaryPhoneNumber        string   `json:"secondaryPhoneNumber"`
@@ -203,6 +205,8 @@ func buildNumbersJSON(now time.Time, numbers []store.PhoneNumber) ([]byte, error
 			PhoneNumber:                 formatPhoneCC(n.CountryCode, n.PhoneNumber),
 			Plan:                        n.PlanName,
 			RenewDays:                   n.AutoExpiryPeriod,
+			RenewalDaysBefore:           n.RenewalDaysBefore,
+			ReminderIntervalDays:        n.ReminderIntervalDays,
 			RenewalIntervalValue:        n.AutoExpiryPeriod,
 			RenewalUnit:                 "days",
 			SecondaryPhoneNumber:        strings.Join(secondary, ", "),

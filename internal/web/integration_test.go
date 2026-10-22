@@ -236,7 +236,7 @@ func TestHTTPExportImportRoundTrip(t *testing.T) {
 	code, _ := postForm(t, c, srv.URL, "/numbers/new", url.Values{
 		"country_code": {"JP"}, "phone_national": {"9012345678"}, "carrier": {"KDDI"},
 		"expiry_date": {"2099-01-01"}, "auto_expiry_period": {"90"}, "keepalive_mode": {"keep"},
-		"renewal_days_before": {"7"}, "sim_type": {"esim"},
+		"renewal_days_before": {"30"}, "reminder_interval_days": {"3"}, "sim_type": {"esim"},
 		"lpa_string": {"LPA:1$rsp.example.com$ABCD"}, "device_id": {fmt.Sprint(devID)},
 		"csrf_token": {tok},
 	})
@@ -288,6 +288,9 @@ func TestHTTPExportImportRoundTrip(t *testing.T) {
 	}
 	if n.LPAString != "LPA:1$rsp.example.com$ABCD" || n.ConfirmCode != "" || n.SimType != "esim" {
 		t.Errorf("eSIM 激活信息未还原: %+v", n)
+	}
+	if n.RenewalDaysBefore != 30 || n.ReminderIntervalDays != 3 {
+		t.Errorf("提醒窗口/重复间隔未往返还原: window=%d interval=%d", n.RenewalDaysBefore, n.ReminderIntervalDays)
 	}
 }
 
@@ -412,6 +415,48 @@ func TestHTTPNumberPastedFullNumber(t *testing.T) {
 	}
 	if n.PhoneNumber != "+819012345678" {
 		t.Errorf("号码 = %q, want %q", n.PhoneNumber, "+819012345678")
+	}
+}
+
+// TestHTTPNumberReminderInterval 重复提醒间隔：保存并在窗口内校验；
+// 间隔大于提醒提前天数必须拒绝。
+func TestHTTPNumberReminderInterval(t *testing.T) {
+	a := integrationApp(t)
+	mustAdmin(t, a)
+	srv, c := newTestServer(t, a)
+	loginAdmin(t, c, srv.URL)
+
+	tok := getCSRF(t, c, srv.URL, "/numbers/new")
+	code, body := postForm(t, c, srv.URL, "/numbers/new", url.Values{
+		"country_code": {"JP"}, "phone_national": {"9033333333"}, "carrier": {"KDDI"},
+		"expiry_date": {"2099-01-01"}, "auto_expiry_period": {"90"}, "keepalive_mode": {"keep"},
+		"renewal_days_before": {"30"}, "reminder_interval_days": {"3"}, "csrf_token": {tok},
+	})
+	if code != 303 {
+		t.Fatalf("建号应 303, got %d %s", code, body)
+	}
+	n, err := a.Numbers.ByPhone(1, "+819033333333")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.RenewalDaysBefore != 30 || n.ReminderIntervalDays != 3 {
+		t.Errorf("提醒窗口/重复间隔未保存: window=%d interval=%d", n.RenewalDaysBefore, n.ReminderIntervalDays)
+	}
+
+	tok = getCSRF(t, c, srv.URL, "/numbers/new")
+	code, body = postForm(t, c, srv.URL, "/numbers/new", url.Values{
+		"country_code": {"JP"}, "phone_national": {"9044444444"}, "carrier": {"KDDI"},
+		"expiry_date": {"2099-01-01"}, "auto_expiry_period": {"90"}, "keepalive_mode": {"keep"},
+		"renewal_days_before": {"30"}, "reminder_interval_days": {"31"}, "csrf_token": {tok},
+	})
+	if code != 200 {
+		t.Fatalf("超限间隔应回显表单 200, got %d", code)
+	}
+	if !strings.Contains(body, "重复提醒间隔不能大于提醒提前天数") {
+		t.Error("应提示重复间隔不能大于提醒窗口")
+	}
+	if _, err := a.Numbers.ByPhone(1, "+819044444444"); err == nil {
+		t.Error("超限间隔的号码不应保存")
 	}
 }
 

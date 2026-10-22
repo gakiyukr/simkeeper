@@ -379,16 +379,17 @@ func (r *NotifyRepo) LastTestWithin(userID int64, now time.Time, d time.Duration
 	return n > 0, err
 }
 
-// HasNotificationToday 当天是否已给该号码发过指定类型的通知（幂等去重，防重复轰炸）。
-// 同日判定谓词方言化（见 Dialect.SameDay），参数传 "2006-01-02"。
-func (r *NotifyRepo) HasNotificationToday(numberID int64, typ string, now time.Time) (bool, error) {
-	var n int
+// LastNotificationAt 返回某号码指定类型最近一次通知的创建时间
+// （"YYYY-MM-DD HH:MM:SS"；没有记录返回空串）。重复提醒间隔按它判断：
+// 失败/待发送记录也算一次提醒，投递失败由 retryFailed 负责重投，
+// 避免同一轮循环重复插入记录。
+func (r *NotifyRepo) LastNotificationAt(numberID int64, typ string) (string, error) {
+	var last sql.NullString
 	err := r.DB.QueryRow(
-		`SELECT COUNT(*) FROM notifications
-		 WHERE phone_number_id = ? AND type = ? AND `+r.DB.Dialect.SameDay("created_at"),
-		numberID, typ, now.Format("2006-01-02"),
-	).Scan(&n)
-	return n > 0, err
+		`SELECT MAX(created_at) FROM notifications WHERE phone_number_id = ? AND type = ?`,
+		numberID, typ,
+	).Scan(&last)
+	return last.String, err
 }
 
 // ListForUser 用户的通知历史。

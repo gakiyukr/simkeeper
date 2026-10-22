@@ -188,7 +188,7 @@ func TestDashboardTemplateRenders(t *testing.T) {
 			Numbers: []store.PhoneNumber{
 				{ID: 7, PhoneNumber: "+819012345678", CountryCode: "JP", CountryName: "日本",
 					Carrier: "KDDI", ExpiryDate: "2099-01-01", Status: "active",
-					RenewalDaysBefore: 7, AutoExpiryPeriod: 90,
+					RenewalDaysBefore: 7, ReminderIntervalDays: 3, AutoExpiryPeriod: 90,
 					Notes: "MESIM购买 主号", DeviceID: 3},
 				{PhoneNumber: "+99900000000", CountryCode: "XX", CountryName: "未知",
 					Carrier: "Mystery Telecom", ExpiryDate: "2099-01-01", Status: "active",
@@ -244,6 +244,9 @@ func TestDashboardTemplateRenders(t *testing.T) {
 	}
 	if !strings.Contains(html, "dev-badge dev-c3") {
 		t.Error("设备徽章应按 ID 稳定取色（ID 3 → c3）")
+	}
+	if !strings.Contains(html, "每 3 天提醒") {
+		t.Error("重复提醒间隔 >1 时应在剩余天数下展示")
 	}
 
 	// 未知国家代码：不渲染旗帜，运营商文字仍在
@@ -312,6 +315,7 @@ func TestNumberFormTemplateRenders(t *testing.T) {
 	esimHTML := render(&store.PhoneNumber{
 		ID: 7, PhoneNumber: "+819012345678", CountryCode: "JP", CountryName: "日本",
 		ExpiryDate: "2099-01-01", Status: "active", SimType: "esim", DeviceID: 3,
+		RenewalDaysBefore: 30, ReminderIntervalDays: 3,
 		LPAString: "LPA:1$rsp.example.com$ABCD", ConfirmCode: "654321",
 	})
 	if !strings.Contains(esimHTML, `<details class="more-settings" open>`) {
@@ -322,6 +326,9 @@ func TestNumberFormTemplateRenders(t *testing.T) {
 	}
 	if !strings.Contains(esimHTML, `value="LPA:1$rsp.example.com$ABCD"`) || !strings.Contains(esimHTML, `value="654321"`) {
 		t.Error("LPA 与确认码应回显")
+	}
+	if !strings.Contains(esimHTML, `name="reminder_interval_days"`) || !strings.Contains(esimHTML, `value="3"`) {
+		t.Error("重复提醒间隔应回显")
 	}
 	if !strings.Contains(esimHTML, `name="status"`) {
 		t.Error("状态选择器应存在（更多设置内）")
@@ -347,6 +354,9 @@ func TestNumberFormTemplateRenders(t *testing.T) {
 	}
 	if !strings.Contains(newHTML, `name="sim_type" value="physical" checked`) {
 		t.Error("新增表单应默认实体卡")
+	}
+	if !strings.Contains(newHTML, `name="reminder_interval_days"`) || !strings.Contains(newHTML, `value="1"`) {
+		t.Error("新增表单的重复提醒间隔应默认 1 天")
 	}
 }
 
@@ -477,7 +487,7 @@ func TestBuildNumbersJSON(t *testing.T) {
 		{ID: 7, PhoneNumber: "+819012345678", CountryCode: "JP", CountryName: "日本",
 			Carrier: "KDDI", ExpiryDate: "2099-01-01", Status: "active", SimType: "esim",
 			LPAString: "LPA:1$rsp.example.com$ABCD", ConfirmCode: "654321",
-			SecondaryNumbers:  "+819012345679",
+			SecondaryNumbers: "+819012345679", RenewalDaysBefore: 30, ReminderIntervalDays: 3,
 			AutoExpiryEnabled: true, AutoExpiryPeriod: 90,
 			CreatedAt: "2026-10-05 10:00:00", UpdatedAt: "2026-10-05 11:00:00"},
 		{ID: 8, PhoneNumber: "+8613800138000", CountryCode: "CN", CountryName: "中国",
@@ -500,6 +510,8 @@ func TestBuildNumbersJSON(t *testing.T) {
 			CountryCode      string   `json:"countryCode"`
 			Flag             string   `json:"flag"`
 			RenewDays        int      `json:"renewDays"`
+			RenewDaysBefore  int      `json:"renewalDaysBefore"`
+			ReminderInterval int      `json:"reminderIntervalDays"`
 			RenewalUnit      string   `json:"renewalUnit"`
 			IsLongTerm       bool     `json:"isLongTerm"`
 			Tags             []string `json:"tags"`
@@ -524,6 +536,9 @@ func TestBuildNumbersJSON(t *testing.T) {
 	}
 	if c.Flag != "🇯🇵" || c.RenewDays != 90 || c.RenewalUnit != "days" || !c.IsLongTerm {
 		t.Errorf("展示字段映射不一致: flag=%q renew=%d unit=%q long=%v", c.Flag, c.RenewDays, c.RenewalUnit, c.IsLongTerm)
+	}
+	if c.RenewDaysBefore != 30 || c.ReminderInterval != 3 {
+		t.Errorf("提醒窗口/重复间隔映射不一致: window=%d interval=%d", c.RenewDaysBefore, c.ReminderInterval)
 	}
 	if c.SecondaryPhone != "+819012345679" || !c.SecondaryOn {
 		t.Errorf("副卡映射不一致: %q %v", c.SecondaryPhone, c.SecondaryOn)

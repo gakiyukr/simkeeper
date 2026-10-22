@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS phone_numbers (
     expiry_date           TEXT   NOT NULL,               -- 到期日 YYYY-MM-DD
     recharge_amount       DOUBLE PRECISION,
     recharge_currency     TEXT   NOT NULL DEFAULT 'USD',
-    renewal_days_before   INT    NOT NULL DEFAULT 7,     -- 续费提醒提前天数
+    renewal_days_before   INT    NOT NULL DEFAULT 7,     -- 续费提醒提前天数（提醒窗口）
+    reminder_interval_days INT   NOT NULL DEFAULT 1,     -- 重复提醒间隔天数（1=每天；不超过提醒窗口）
     auto_expiry_enabled   INT    NOT NULL DEFAULT 0,     -- 自动续期开关
     auto_start_date       TEXT,                          -- 自动续期起始日
     auto_expiry_period    INT    CHECK (auto_expiry_period IS NULL OR auto_expiry_period BETWEEN 1 AND 3650),

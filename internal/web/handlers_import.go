@@ -152,6 +152,8 @@ type simhubCard struct {
 	Plan                 string `json:"plan"`
 	TransactionNotes     string `json:"transactionNotes"`
 	RenewDays            int    `json:"renewDays"`
+	RenewalDaysBefore    int    `json:"renewalDaysBefore"`    // 本程序扩展；外部 SIMHub 文件没有
+	ReminderIntervalDays int    `json:"reminderIntervalDays"` // 本程序扩展；外部 SIMHub 文件没有
 	IsLongTerm           bool   `json:"isLongTerm"`
 	SecondaryPhoneNumber string `json:"secondaryPhoneNumber"`
 }
@@ -183,7 +185,17 @@ func simhubCardToNumber(c simhubCard) (store.PhoneNumber, string) {
 	n.Carrier = strings.TrimSpace(c.Carrier)
 	n.ExpiryDate = expiry
 	n.Status = "active"
-	n.RenewalDaysBefore = 7
+	n.RenewalDaysBefore = c.RenewalDaysBefore
+	if n.RenewalDaysBefore < 1 || n.RenewalDaysBefore > 90 {
+		n.RenewalDaysBefore = 7
+	}
+	n.ReminderIntervalDays = c.ReminderIntervalDays
+	if n.ReminderIntervalDays < 1 {
+		n.ReminderIntervalDays = 1
+	}
+	if n.ReminderIntervalDays > n.RenewalDaysBefore {
+		n.ReminderIntervalDays = n.RenewalDaysBefore
+	}
 	n.SimType = "physical"
 	if code := strings.Join(strings.Fields(c.ActivationCode), ""); strings.HasPrefix(strings.ToUpper(code), "LPA:") {
 		n.SimType = "esim"
@@ -227,7 +239,16 @@ func (a *App) importNumbersFromSIMHub(userID int64, raw []byte) (created, update
 			continue
 		}
 		n.ID, n.UserID, n.DeviceID = existing.ID, existing.UserID, existing.DeviceID
-		n.RenewalDaysBefore = existing.RenewalDaysBefore
+		// 外部 SIMHub 文件没有这两个本程序扩展字段：保留库内现值。
+		if c.RenewalDaysBefore < 1 || c.RenewalDaysBefore > 90 {
+			n.RenewalDaysBefore = existing.RenewalDaysBefore
+		}
+		if c.ReminderIntervalDays < 1 {
+			n.ReminderIntervalDays = existing.ReminderIntervalDays
+		}
+		if n.ReminderIntervalDays > n.RenewalDaysBefore {
+			n.ReminderIntervalDays = n.RenewalDaysBefore
+		}
 		n.CreatedAt = existing.CreatedAt
 		if e = a.Numbers.Update(&n); e != nil {
 			skipped++
@@ -298,6 +319,7 @@ func (a *App) importNumbersFromCSV(userID int64, raw []byte) (created, updated, 
 		n.SimType, n.LPAString, n.ConfirmCode = existing.SimType, existing.LPAString, existing.ConfirmCode
 		n.PlanName, n.Notes, n.SecondaryNumbers = existing.PlanName, existing.Notes, existing.SecondaryNumbers
 		n.RenewalDaysBefore = existing.RenewalDaysBefore
+		n.ReminderIntervalDays = existing.ReminderIntervalDays
 		n.AutoExpiryEnabled, n.AutoStartDate, n.AutoExpiryPeriod, n.AutoCalculatedExpiry =
 			existing.AutoExpiryEnabled, existing.AutoStartDate, existing.AutoExpiryPeriod, existing.AutoCalculatedExpiry
 		n.CreatedAt = existing.CreatedAt

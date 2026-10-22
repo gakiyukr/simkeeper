@@ -63,7 +63,7 @@ func (j *Jobs) RunOnce(now time.Time) (sent, failed int, lines []string) {
 
 	logf("=== 定时任务开始执行 ===")
 
-	// 1. 到期提醒：按每号码独立的提前天数过滤，当天已发过的跳过。
+	// 1. 到期提醒：按每号码独立的提醒窗口过滤，再按重复间隔判断是否到点。
 	// 注意：周期号码的滚动不再由 cron 自动完成——未续费的号码到期后
 	// 进入「已过期」分类，由用户点「已续费」顺延/复活。
 	numbers, err := j.numbers.ListExpiring()
@@ -88,11 +88,32 @@ func (j *Jobs) RunOnce(now time.Time) (sent, failed int, lines []string) {
 }
 
 // sendDueNotifications 找出进入提醒窗口的号码并分发，返回 (成功, 失败) 条数。
-// 单一保号提醒：进入提醒窗口当天发一条（通知类型沿用历史命名 "renewal"），
-// 去重按（号码, 当天）维度。
+// 单一保号提醒（通知类型沿用历史命名 "renewal"）：进入窗口后首次提醒，
+// 之后每 ReminderIntervalDays 天提醒一次（默认 1 天）；续费令到期日离开
+// 窗口后自然停止。
 // userOutcome 汇总单个用户本轮的渠道投递结果。
 type userOutcome struct {
 	succeeded, failed []string
+}
+
+// reminderDue 判断进入提醒窗口的号码是否到了下一次提醒时间。
+// last 为空表示本号码从未提醒；否则按自然日比较：间隔 1 天等价于
+// 原来的「当天已发则跳过」，间隔 N 天则在第 N 个自然日再次提醒。
+// 时间解析失败时按「可以提醒」处理，避免坏数据让提醒永久静默。
+func reminderDue(last string, intervalDays int, now time.Time) bool {
+	if last == "" {
+		return true
+	}
+	if intervalDays < 1 {
+		intervalDays = 1
+	}
+	t, err := time.ParseInLocation(time.DateTime, last, now.Location())
+	if err != nil {
+		return true
+	}
+	lastDay := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, now.Location())
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	return !lastDay.AddDate(0, 0, intervalDays).After(today)
 }
 
 func (j *Jobs) sendDueNotifications(numbers []store.PhoneNumber, now time.Time, logf func(string, ...any)) (map[int64]*userOutcome, int, int) {
@@ -107,15 +128,15 @@ func (j *Jobs) sendDueNotifications(numbers []store.PhoneNumber, now time.Time, 
 		if days > n.RenewalDaysBefore {
 			continue
 		}
-		done, err := j.notify.HasNotificationToday(n.ID, "renewal", now)
+		last, err := j.notify.LastNotificationAt(n.ID, "renewal")
 		if err != nil {
-			logf("查询今日是否已发送失败(号码 %s): %v", n.PhoneNumber, err)
+			logf("查询上次提醒时间失败(号码 %s): %v", n.PhoneNumber, err)
 			continue
 		}
-		if done {
+		if !reminderDue(last, n.ReminderIntervalDays, now) {
 			continue
 		}
-		logf("发送保号通知: 用户ID=%d, 号码ID=%d", n.UserID, n.ID)
+		logf("发送保号通知: 用户ID=%d, 号码ID=%d（间隔 %d 天）", n.UserID, n.ID, n.ReminderIntervalDays)
 		res := j.sender.SendToEnabledChannels(n.UserID, n.ID, "renewal", buildMessage(n, now))
 		sent += res.SentCount
 		failed += res.TotalChannels - res.SentCount

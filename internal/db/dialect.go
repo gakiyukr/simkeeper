@@ -103,20 +103,6 @@ func (d Dialect) UpsertUpdate(table, conflictCol string, cols, updateCols []stri
 	}
 }
 
-// SameDay 返回「列值与参数落在同一天」的谓词，配一个 "2006-01-02" 格式的参数使用。
-// 用于通知的当日去重：三种方言的日期提取函数不同。
-func (d Dialect) SameDay(col string) string {
-	switch d.Name {
-	case DialectMySQL:
-		return "DATE(" + col + ") = ?"
-	case DialectPostgres:
-		// 时间戳按约定存 "YYYY-MM-DD HH:MM:SS" 文本，取前 10 位即为日期
-		return "left(" + col + ", 10) = ?"
-	default: // sqlite
-		return "date(" + col + ") = ?"
-	}
-}
-
 // InsertID 执行 INSERT 并返回自增主键。
 // SQLite / MySQL 走 LastInsertId；PostgreSQL 不支持，改为追加 RETURNING id。
 func (d *DB) InsertID(query string, args ...any) (int64, error) {

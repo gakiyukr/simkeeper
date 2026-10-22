@@ -18,7 +18,8 @@ type PhoneNumber struct {
 	CountryName          string
 	Carrier              string
 	ExpiryDate           string // YYYY-MM-DD
-	RenewalDaysBefore    int    // 保号提醒提前天数（原续费/使用两类已合并为一类）
+	RenewalDaysBefore    int    // 保号提醒提前天数（提醒窗口）
+	ReminderIntervalDays int    // 重复提醒间隔天数（1=每天；不超过 RenewalDaysBefore）
 	AutoExpiryEnabled    bool
 	AutoStartDate        string
 	AutoExpiryPeriod     int // 90 | 180 | 365，0 表示未启用
@@ -41,7 +42,8 @@ type NumberRepo struct {
 	DB *db.DB
 }
 
-const numberCols = `id, user_id, phone_number, country_code, country_name, carrier, expiry_date, renewal_days_before,
+const numberCols = `id, user_id, phone_number, country_code, country_name, carrier, expiry_date,
+	renewal_days_before, reminder_interval_days,
 	auto_expiry_enabled, auto_start_date, auto_expiry_period, auto_calculated_expiry,
 	status, notes, created_at, no_keepalive, plan_name, secondary_numbers,
 	sim_type, lpa_string, confirm_code, updated_at, device_id`
@@ -55,7 +57,7 @@ func scanNumber(scan interface{ Scan(...any) error }) (*PhoneNumber, error) {
 	var lpa, confirm sql.NullString
 	var deviceID sql.NullInt64
 	err := scan.Scan(&n.ID, &n.UserID, &n.PhoneNumber, &n.CountryCode, &n.CountryName,
-		&carrier, &n.ExpiryDate, &n.RenewalDaysBefore,
+		&carrier, &n.ExpiryDate, &n.RenewalDaysBefore, &n.ReminderIntervalDays,
 		&n.AutoExpiryEnabled, &autoStart, &period, &autoCalc,
 		&n.Status, &notes, &n.CreatedAt, &noKeepalive, &planName, &secondary,
 		&n.SimType, &lpa, &confirm, &n.UpdatedAt, &deviceID)
@@ -73,6 +75,9 @@ func scanNumber(scan interface{ Scan(...any) error }) (*PhoneNumber, error) {
 		n.AutoExpiryPeriod = int(period.Int64)
 	}
 	n.NoKeepalive = noKeepalive == 1
+	if n.ReminderIntervalDays < 1 {
+		n.ReminderIntervalDays = 1
+	}
 	n.PlanName = planName.String
 	n.SecondaryNumbers = secondary.String
 	if n.SimType == "" {
@@ -134,24 +139,33 @@ func (r *NumberRepo) Create(n *PhoneNumber) (int64, error) {
 	if n.SimType != "esim" {
 		n.SimType = "physical"
 	}
+	n.normalizeReminderInterval()
 	if err := encryptESIMSecrets(n); err != nil {
 		return 0, err
 	}
 	return r.DB.InsertID(
 		`INSERT INTO phone_numbers
 		 (user_id, phone_number, country_code, country_name, carrier, expiry_date,
-		  renewal_days_before,
+		  renewal_days_before, reminder_interval_days,
 		  auto_expiry_enabled, auto_start_date, auto_expiry_period, auto_calculated_expiry,
 		  no_keepalive, plan_name, secondary_numbers, sim_type, lpa_string, confirm_code,
 		  device_id, status, notes)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		n.UserID, n.PhoneNumber, n.CountryCode, n.CountryName, nullStr(n.Carrier), n.ExpiryDate,
-		n.RenewalDaysBefore,
+		n.RenewalDaysBefore, n.ReminderIntervalDays,
 		boolInt(n.AutoExpiryEnabled), nullStr(n.AutoStartDate), nullInt(n.AutoExpiryPeriod),
 		nullStr(n.AutoCalculatedExpiry), boolInt(n.NoKeepalive),
 		nullStr(n.PlanName), nullStr(n.SecondaryNumbers), n.SimType, nullStr(n.LPAString), nullStr(n.ConfirmCode),
 		nullInt64(n.DeviceID), n.Status, nullStr(n.Notes),
 	)
+}
+
+// normalizeReminderInterval 保证落库值至少有 1 天；上限由表单/导入按
+// 提醒窗口校验（store 不擅自把用户设置改小）。
+func (n *PhoneNumber) normalizeReminderInterval() {
+	if n.ReminderIntervalDays < 1 {
+		n.ReminderIntervalDays = 1
+	}
 }
 
 // Update 全量更新号码字段（归属校验由调用方保证，语句仍带 user_id 条件兜底）。
@@ -160,19 +174,20 @@ func (r *NumberRepo) Update(n *PhoneNumber) error {
 	if n.SimType != "esim" {
 		n.SimType = "physical"
 	}
+	n.normalizeReminderInterval()
 	if err := encryptESIMSecrets(n); err != nil {
 		return err
 	}
 	_, err := r.DB.Exec(
 		`UPDATE phone_numbers SET
 		 phone_number=?, country_code=?, country_name=?, carrier=?, expiry_date=?,
-		 renewal_days_before=?,
+		 renewal_days_before=?, reminder_interval_days=?,
 		 auto_expiry_enabled=?, auto_start_date=?, auto_expiry_period=?, auto_calculated_expiry=?,
 		 no_keepalive=?, plan_name=?, secondary_numbers=?, sim_type=?, lpa_string=?, confirm_code=?,
 		 device_id=?, status=?, notes=?, updated_at=?
 		 WHERE id=? AND user_id=?`,
 		n.PhoneNumber, n.CountryCode, n.CountryName, nullStr(n.Carrier), n.ExpiryDate,
-		n.RenewalDaysBefore,
+		n.RenewalDaysBefore, n.ReminderIntervalDays,
 		boolInt(n.AutoExpiryEnabled), nullStr(n.AutoStartDate), nullInt(n.AutoExpiryPeriod),
 		nullStr(n.AutoCalculatedExpiry), boolInt(n.NoKeepalive),
 		nullStr(n.PlanName), nullStr(n.SecondaryNumbers), n.SimType, nullStr(n.LPAString), nullStr(n.ConfirmCode),
@@ -278,7 +293,7 @@ func (r *NumberRepo) list(where string, args []any, page, limit int) ([]PhoneNum
 // 供定时任务在内存里按剩余天数过滤（数据量小，避免 SQLite 日期函数方言）。
 func (r *NumberRepo) ListExpiring() ([]PhoneNumber, error) {
 	q := `SELECT pn.id, pn.user_id, pn.phone_number, pn.country_code, pn.country_name, pn.carrier,
-		pn.expiry_date, pn.renewal_days_before,
+		pn.expiry_date, pn.renewal_days_before, pn.reminder_interval_days,
 		pn.auto_expiry_enabled, pn.auto_start_date, pn.auto_expiry_period, pn.auto_calculated_expiry,
 		pn.status, pn.notes, pn.created_at, pn.no_keepalive, pn.plan_name, pn.secondary_numbers,
 		pn.sim_type, pn.lpa_string, pn.confirm_code, pn.updated_at, pn.device_id

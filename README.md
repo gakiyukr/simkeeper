@@ -22,7 +22,7 @@ go build -o simkeeper .
 | `mysql` | `-dsn 'user:pass@tcp(127.0.0.1:3306)/simkeeper?charset=utf8mb4'` | 建议 MySQL 8.0+ / MariaDB 10.5+ |
 | `postgres` | `-dsn 'postgres://user:pass@127.0.0.1:5432/simkeeper?TimeZone=Asia/Shanghai'` | 建议 PG 12+；时间列存 TEXT，请把会话时区设为业务时区 |
 
-环境变量等价写法：`SK_DRIVER` / `SK_DB` / `SK_DSN`。schema 按驱动自动选择（`internal/db/schema_*.sql`），全为幂等建表，可安全重复执行；老库新增列由启动时的增量迁移自动补齐。方言差异集中在 `internal/db/dialect.go`（UPSERT、当日去重谓词、`?`→`$n` 占位符重绑、PostgreSQL 的 `RETURNING id`），有单元测试覆盖生成的 SQL 形态。
+环境变量等价写法：`SK_DRIVER` / `SK_DB` / `SK_DSN`。schema 按驱动自动选择（`internal/db/schema_*.sql`），全为幂等建表，可安全重复执行；老库新增列由启动时的增量迁移自动补齐。方言差异集中在 `internal/db/dialect.go`（UPSERT、`?`→`$n` 占位符重绑、PostgreSQL 的 `RETURNING id`），有单元测试覆盖生成的 SQL 形态。
 
 三方言统一约定：**时间戳一律由 Go 侧生成为 "YYYY-MM-DD HH:MM:SS" 文本写入**（SQLite 用 TEXT 列、MySQL 用 DATETIME 列且连接不开 parseTime、PG 用 TEXT 列），保证排序、比较与 Go 侧解析行为完全一致。
 
@@ -100,7 +100,7 @@ internal/web/              路由、中间件、处理器、内嵌模板
 
 **行为对齐**
 
-- 单一保号提醒（每号码独立提前天数、当天去重，v0.1.3 起由原续费/使用两类合并为一条「该手动保号了」通知）、无需保号豁免、过期号码不提醒；周期号码改为「开始日期 + 周期」定义、由「已续费」手动滚动（Go 版语义，见下）。
+- 单一保号提醒（每号码独立提前天数 + 重复提醒间隔：进入提醒窗口后每 N 天提醒一次，默认 1 天即每天，间隔不能超过提前天数；v0.1.3 起由原续费/使用两类合并为一条「该手动保号了」通知）、无需保号豁免、过期号码不提醒；周期号码改为「开始日期 + 周期」定义、由「已续费」手动滚动（Go 版语义，见下）。
 - 邮件正文沿用 multipart/alternative（纯文本 + 品牌样式 HTML），主题按 RFC 2047 编码；Telegram 发纯文本不带 parse_mode。
 
 **已省略**

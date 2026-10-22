@@ -588,6 +588,7 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	carrier := strings.TrimSpace(r.PostFormValue("carrier"))
 	expiry := strings.TrimSpace(r.PostFormValue("expiry_date"))
 	renewalDays := atoiDefault(r.PostFormValue("renewal_days_before"), 7)
+	reminderInterval := atoiDefault(r.PostFormValue("reminder_interval_days"), 1)
 	notes := strings.TrimSpace(r.PostFormValue("notes"))
 	status := r.PostFormValue("status")
 	if status != "inactive" {
@@ -643,7 +644,7 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 	submitted := &store.PhoneNumber{
 		UserID: userID, PhoneNumber: phone, CountryCode: countryCode, CountryName: countryName,
 		Carrier: carrier, ExpiryDate: expiry,
-		RenewalDaysBefore: renewalDays,
+		RenewalDaysBefore: renewalDays, ReminderIntervalDays: reminderInterval,
 		AutoExpiryEnabled: autoEnabled, AutoStartDate: autoStart,
 		AutoExpiryPeriod: autoPeriod, Status: status, Notes: notes,
 		NoKeepalive: noKeepalive, PlanName: planName, SecondaryNumbers: secondary,
@@ -726,11 +727,18 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 		fail("保号提醒提前天数应为 1-90")
 		return
 	}
+	if reminderInterval < 1 {
+		reminderInterval = 1
+	}
+	if reminderInterval > renewalDays {
+		fail(fmt.Sprintf("重复提醒间隔不能大于提醒提前天数（%d 天）", renewalDays))
+		return
+	}
 
 	n := &store.PhoneNumber{
 		UserID: userID, PhoneNumber: phone, CountryCode: countryCode, CountryName: countryName,
 		Carrier: carrier, ExpiryDate: expiry,
-		RenewalDaysBefore: renewalDays,
+		RenewalDaysBefore: renewalDays, ReminderIntervalDays: reminderInterval,
 		AutoExpiryEnabled: autoEnabled, AutoStartDate: autoStart,
 		AutoExpiryPeriod: autoPeriod, Status: status, Notes: notes,
 		NoKeepalive: noKeepalive, PlanName: planName, SecondaryNumbers: secondary,

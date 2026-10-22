@@ -68,21 +68,6 @@ func TestUpsertUpdate(t *testing.T) {
 	}
 }
 
-func TestSameDay(t *testing.T) {
-	for _, d := range []string{DialectSQLite, DialectMySQL, DialectPostgres} {
-		p := (Dialect{Name: d}).SameDay("created_at")
-		if n := strings.Count(p, "?"); n != 1 {
-			t.Errorf("%s SameDay 应恰好含 1 个占位符: %s", d, p)
-		}
-		if !strings.Contains(p, "created_at") {
-			t.Errorf("%s SameDay 未引用列名: %s", d, p)
-		}
-	}
-	if got := (Dialect{Name: DialectPostgres}).SameDay("created_at"); got != "left(created_at, 10) = ?" {
-		t.Errorf("postgres SameDay = %s", got)
-	}
-}
-
 func TestSplitStatements(t *testing.T) {
 	script := `
 -- 开头注释
