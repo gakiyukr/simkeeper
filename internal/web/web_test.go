@@ -173,6 +173,30 @@ func TestFilterSortNumbers(t *testing.T) {
 	}
 }
 
+// TestFilterSortNumbersByCountry 国家代码 A-Z：按两位 ISO 代码升序；
+// 同国按到期日升序、ID 兜底；空代码排最后。
+func TestFilterSortNumbersByCountry(t *testing.T) {
+	nums := []store.PhoneNumber{
+		{ID: 1, CountryCode: "JP", ExpiryDate: "2026-12-01", Status: "active"},
+		{ID: 2, CountryCode: "CN", ExpiryDate: "2026-11-01", Status: "active"},
+		{ID: 3, CountryCode: "HK", ExpiryDate: "2026-10-01", Status: "active"},
+		{ID: 4, CountryCode: "CN", ExpiryDate: "2026-09-01", Status: "active"},
+		{ID: 5, CountryCode: "", ExpiryDate: "2026-08-01", Status: "active"},
+		{ID: 6, CountryCode: "US", ExpiryDate: "2026-07-01", Status: "active"},
+	}
+	got := filterSortNumbers(nums, "", "", "country")
+	gotIDs := make([]int64, len(got))
+	for i := range got {
+		gotIDs[i] = got[i].ID
+	}
+	want := []int64{4, 2, 3, 1, 6, 5}
+	for i, id := range want {
+		if gotIDs[i] != id {
+			t.Fatalf("国家代码排序第 %d 位 = ID %d, want %d（顺序 %v）", i+1, gotIDs[i], id, gotIDs)
+		}
+	}
+}
+
 // TestDashboardTemplateRenders 渲染烟测：首页表格为「运营商（旗+名）| 号码 | …」
 // 列序时应完整渲染；旗帜按白名单输出，未知国家代码退化为无旗、仅运营商文字。
 func TestDashboardTemplateRenders(t *testing.T) {
@@ -255,6 +279,9 @@ func TestDashboardTemplateRenders(t *testing.T) {
 	}
 	if !strings.Contains(html, "Mystery Telecom") {
 		t.Error("未知国家的运营商文字不应丢失")
+	}
+	if !strings.Contains(html, `<option value="country"`) {
+		t.Error("排序下拉应包含国家代码 A-Z")
 	}
 }
 

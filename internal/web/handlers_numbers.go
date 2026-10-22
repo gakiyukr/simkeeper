@@ -401,6 +401,7 @@ func (a *App) HandleNumbers(w http.ResponseWriter, r *http.Request) {
 // filterSortNumbers 纯函数：关键词匹配号码/国家/运营商/备注（不区分大小写），
 // 分类过滤（与 categoryCounts 的优先级口径一致）。排序：默认（空）与 carrier
 // 按运营商名称（数字 < 字母 < 其他字符，大写在前；同名按到期日升序、ID 兜底）；
+// country 按 ISO 两位国家代码字母升序（空代码排最后，同国按到期日、ID 兜底）；
 // 到期时间升序/降序中无需保号号码排最后（其到期日仅作参考）；平局按 ID 保证稳定。
 func filterSortNumbers(all []store.PhoneNumber, q, cat, sortKey string) []store.PhoneNumber {
 	q = strings.ToLower(strings.TrimSpace(q))
@@ -461,6 +462,23 @@ func filterSortNumbers(all []store.PhoneNumber, q, cat, sortKey string) []store.
 				return out[i].CreatedAt > out[j].CreatedAt
 			}
 			return out[i].ID > out[j].ID
+		}
+	case "country":
+		less = func(i, j int) bool {
+			ci, cj := out[i].CountryCode, out[j].CountryCode
+			if ci != cj {
+				if ci == "" {
+					return false // 空代码排最后
+				}
+				if cj == "" {
+					return true
+				}
+				return ci < cj
+			}
+			if out[i].ExpiryDate != out[j].ExpiryDate {
+				return out[i].ExpiryDate < out[j].ExpiryDate
+			}
+			return out[i].ID < out[j].ID
 		}
 	default: // 空值与 "carrier"：首页默认按运营商名称排序
 		less = func(i, j int) bool {

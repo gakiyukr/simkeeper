@@ -28,6 +28,7 @@
     <input class="input" type="text" name="q" value="{{.Content.Search}}" placeholder="搜索号码 / 国家 / 运营商 / 备注">
     <select class="select auto" name="sort">
       <option value="carrier" {{if or (eq .Content.Sort "carrier") (eq .Content.Sort "")}}selected{{end}}>运营商名称</option>
+      <option value="country" {{if eq .Content.Sort "country"}}selected{{end}}>国家代码 A-Z</option>
       <option value="expiry_asc" {{if eq .Content.Sort "expiry_asc"}}selected{{end}}>到期日 ↑</option>
       <option value="expiry_desc" {{if eq .Content.Sort "expiry_desc"}}selected{{end}}>到期日 ↓</option>
       <option value="created_desc" {{if eq .Content.Sort "created_desc"}}selected{{end}}>最新添加</option>
