@@ -88,13 +88,18 @@ func SendEmail(cfg EmailConfig, to, subject, htmlBody, altText string) error {
 			return fmt.Errorf("SMTP 连接失败(%s): %w", addr, dialErr)
 		}
 		client, err = smtp.NewClient(conn, cfg.Host)
-	default: // tls: 先明文连接再 STARTTLS
+	default: // tls: 先明文连接再 STARTTLS；不支持时必须报错，不能静默降级
 		client, err = smtp.Dial(addr)
 		if err == nil {
 			if ok, _ := client.Extension("STARTTLS"); ok {
 				err = client.StartTLS(&tls.Config{ServerName: cfg.Host})
+			} else {
+				err = fmt.Errorf("SMTP 服务器 %s 未提供 STARTTLS；tls 模式要求加密连接，已中止（请确认服务端支持 STARTTLS，或改用 ssl/465）", addr)
 			}
-			// 服务器不支持 STARTTLS 时按明文继续，交由用户自行选择 none
+		}
+		if err != nil && client != nil {
+			_ = client.Close()
+			client = nil
 		}
 	}
 	if err != nil {
@@ -151,7 +156,21 @@ type loginAuth struct {
 }
 
 func (a *loginAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
+	// 与标准库 PlainAuth 一致：拒绝在未加密连接上发送凭据（本机中继除外）。
+	// tls 模式的 STARTTLS 缺失已在 SendEmail 中直接报错，这里是第二道防线，
+	// 避免 none 模式或异常路径把用户名密码明文交出去。
+	if !server.TLS && !isLoopbackHost(server.Name) {
+		return "", nil, fmt.Errorf("SMTP AUTH LOGIN 拒绝在未加密连接上发送凭据（请改用 ssl 或 STARTTLS）")
+	}
 	return "LOGIN", nil, nil
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
