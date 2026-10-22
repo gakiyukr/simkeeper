@@ -39,6 +39,8 @@ var ErrNotInited = errors.New("secret: 未初始化")
 
 // Init 装载或生成密钥。重复调用是空操作。
 // keyFile 为空时跳过文件来源（此时必须已通过环境变量提供密钥）。
+// 文件不存在时自动生成；文件存在但不可读或长度不是 32 字节时必须报错，
+// 绝不能覆盖——那会把一次可修复的密钥损坏变成既有密文的永久丢失。
 func Init(keyFile string) error {
 	if inited {
 		return nil
@@ -53,10 +55,21 @@ func Init(keyFile string) error {
 	if keyFile == "" {
 		return fmt.Errorf("secret: 未提供密钥文件且未设置 SK_SECRET_KEY")
 	}
-	if b, err := os.ReadFile(keyFile); err == nil && len(b) == 32 {
+	b, err := os.ReadFile(keyFile)
+	switch {
+	case err == nil:
+		if len(b) != 32 {
+			return fmt.Errorf("secret: 密钥文件 %s 长度应为 32 字节（实际 %d 字节）；"+
+				"为避免覆盖既有密钥导致密文永久无法解密，已中止。请恢复正确的密钥文件，"+
+				"或确认无需保留旧数据后手动删除它再重新生成", keyFile, len(b))
+		}
 		return initWithKey(b)
+	case errors.Is(err, os.ErrNotExist):
+		// 首次运行：生成新密钥并落盘（0600，与数据库分离）
+	default:
+		return fmt.Errorf("secret: 读取密钥文件 %s 失败: %w", keyFile, err)
 	}
-	// 生成新密钥并落盘（0600，与数据库分离）
+
 	k := make([]byte, 32)
 	if _, err := rand.Read(k); err != nil {
 		return fmt.Errorf("secret: 生成密钥失败: %w", err)
