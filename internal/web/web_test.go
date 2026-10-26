@@ -216,7 +216,7 @@ func TestDashboardTemplateRenders(t *testing.T) {
 					Notes: "MESIM购买 主号", DeviceID: 3},
 				{PhoneNumber: "+99900000000", CountryCode: "XX", CountryName: "未知",
 					Carrier: "Mystery Telecom", ExpiryDate: "2099-01-01", Status: "active",
-					RenewalDaysBefore: 7},
+					SimType: "physical", RenewalDaysBefore: 7},
 			},
 			TotalAll: 2,
 		},
@@ -268,6 +268,9 @@ func TestDashboardTemplateRenders(t *testing.T) {
 	}
 	if !strings.Contains(html, "dev-badge dev-c3") {
 		t.Error("设备徽章应按 ID 稳定取色（ID 3 → c3）")
+	}
+	if !strings.Contains(html, ">实体卡</span>") {
+		t.Error("无设备的实体卡应显示实体卡标签")
 	}
 	if !strings.Contains(html, "每 3 天提醒") {
 		t.Error("重复提醒间隔 >1 时应在剩余天数下展示")
