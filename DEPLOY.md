@@ -16,6 +16,9 @@
 curl -fsSL https://raw.githubusercontent.com/gakiyukr/simkeeper/main/deploy/simkeeper.sh -o simkeeper.sh
 SIMKEEPER_TZ=Asia/Shanghai bash simkeeper.sh install
 
+# 自定义布局的机器（如二进制在 /opt/binary/simkeeper）：
+SIMKEEPER_INSTALL_DIR=/opt/binary/simkeeper bash simkeeper.sh update
+
 # 升级（默认拉最新 Release；也可 --version vX.Y.Z 或 --file 本地二进制）
 bash simkeeper.sh update
 

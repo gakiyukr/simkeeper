@@ -11,8 +11,9 @@
 set -euo pipefail
 
 REPO="gakiyukr/simkeeper"
-INSTALL_DIR="/opt/simkeeper"
-DATA_DIR="/var/lib/simkeeper"
+# 路径可用环境变量覆盖（适配自定义布局，如 Bero-DE 的 /opt/binary/simkeeper）
+INSTALL_DIR="${SIMKEEPER_INSTALL_DIR:-/opt/simkeeper}"
+DATA_DIR="${SIMKEEPER_DATA_DIR:-/var/lib/simkeeper}"
 SERVICE="simkeeper"
 SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
 DEFAULT_TZ="Asia/Shanghai"
@@ -223,7 +224,10 @@ usage() {
   update   [--version vX.Y.Z | --file 路径] 升级（自动备份 + 健康检查 + 失败回滚）
   remove   [--purge]                        卸载（默认保留数据）
 
-环境变量：SIMKEEPER_TZ=Asia/Shanghai（install 时写入 systemd 单元）
+环境变量：
+  SIMKEEPER_TZ=Asia/Shanghai        install 时写入 systemd 单元的时区
+  SIMKEEPER_INSTALL_DIR=...         二进制目录（默认 /opt/simkeeper）
+  SIMKEEPER_DATA_DIR=...            数据目录（默认 /var/lib/simkeeper）
 USAGE
   exit 1
 }
