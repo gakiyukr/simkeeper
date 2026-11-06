@@ -17,7 +17,7 @@
 
 <div class="card">
   <div class="cat-chips">
-    <a class="chip {{if eq .Content.Cat ""}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort ""}}">全部 <b>{{.Content.TotalAll}}</b></a>
+    <a class="chip {{if eq .Content.Cat ""}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort ""}}">全部 <b>{{.Content.Counts.Active}}</b></a>
     <a class="chip {{if eq .Content.Cat "cycle"}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort "cycle"}}">需要周期性保号 <b>{{.Content.Counts.Cycle}}</b></a>
     <a class="chip {{if eq .Content.Cat "none"}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort "none"}}">无需保号 <b>{{.Content.Counts.None}}</b></a>
     <a class="chip {{if eq .Content.Cat "expired"}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort "expired"}}">已过期 <b>{{.Content.Counts.Expired}}</b></a>

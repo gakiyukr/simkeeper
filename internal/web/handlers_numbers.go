@@ -367,7 +367,9 @@ func (a *App) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 // CategoryCounts 号码三类保号分类 + 已终止的数量（互斥，合计 = 总数）。
+// Active = 除已终止外的全部（「全部」默认视图不含已终止，计数与之一致）。
 type CategoryCounts struct {
+	Active  int // 未终止总数（Cycle + None + Expired）
 	Cycle   int // 需要周期性保号（活跃、未过期）
 	None    int // 无需保号
 	Lost    int // 已终止（仅作记录）
@@ -390,6 +392,7 @@ func categoryCounts(nums []store.PhoneNumber, now time.Time) CategoryCounts {
 			c.Cycle++
 		}
 	}
+	c.Active = c.Cycle + c.None + c.Expired
 	return c
 }
 
@@ -409,6 +412,10 @@ func filterSortNumbers(all []store.PhoneNumber, q, cat, sortKey string) []store.
 	out := make([]store.PhoneNumber, 0, len(all))
 	for _, n := range all {
 		expired := n.DaysLeft(now) < 0
+		// 已终止的号码只出现在「已终止」分类中：默认视图与其他分类一律排除
+		if cat != "inactive" && n.Status == "inactive" {
+			continue
+		}
 		switch cat {
 		case "none":
 			if !n.NoKeepalive {

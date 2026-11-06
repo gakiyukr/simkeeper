@@ -120,16 +120,19 @@ func TestFilterSortNumbers(t *testing.T) {
 			Carrier: carrier, Notes: notes, Status: status, ExpiryDate: expiry, CreatedAt: created}
 	}
 	nums := []store.PhoneNumber{
-		mk(3, "+8613800000003", "中国", "移动", "备用", "active", "2026-12-01", "2026-10-01 10:00:00"),
-		mk(1, "+85266000001", "香港", "CSL", "", "active", "2026-11-01", "2026-10-03 09:00:00"),
+		mk(3, "+8613800000003", "中国", "移动", "备用", "active", "2098-12-01", "2026-10-01 10:00:00"),
+		mk(1, "+85266000001", "香港", "CSL", "", "active", "2099-01-01", "2026-10-03 09:00:00"),
 		mk(2, "+442079460958", "英国", "EE", "主力号", "inactive", "2020-01-01", "2026-10-02 12:00:00"), // 已过期+停用
 		mk(4, "+8613900000004", "中国", "联通", "", "active", "2099-01-01", "2026-10-04 08:00:00"),
 	}
 	nums[3].NoKeepalive = true
 
-	// 关键词：备注匹配
-	if got := filterSortNumbers(nums, "主力号", "", ""); len(got) != 1 || got[0].ID != 2 {
-		t.Errorf("备注搜索应命中 ID=2, got %+v", got)
+	// 关键词：备注匹配——已终止号码不出现在默认视图，切到已终止分类才可见
+	if got := filterSortNumbers(nums, "主力号", "", ""); len(got) != 0 {
+		t.Errorf("默认视图应排除已终止号码, got %+v", got)
+	}
+	if got := filterSortNumbers(nums, "主力号", "inactive", ""); len(got) != 1 || got[0].ID != 2 {
+		t.Errorf("已终止分类下备注搜索应命中 ID=2, got %+v", got)
 	}
 	// 分类：无需保号
 	if got := filterSortNumbers(nums, "", "none", ""); len(got) != 1 || got[0].ID != 4 {
@@ -148,24 +151,24 @@ func TestFilterSortNumbers(t *testing.T) {
 	if len(got) != 2 || got[0].ID != 1 || got[1].ID != 3 {
 		t.Errorf("周期保号分类应为 ID=1,3, got %+v", got)
 	}
-	// 默认排序：运营商名称（数字 < 字母 < 其他字符）：CSL < EE < 中国移动 < 中国联通
+	// 默认排序：运营商名称（数字 < 字母 < 其他字符）；已终止的 ID=2 被默认视图排除
 	got = filterSortNumbers(nums, "", "", "")
-	if got[0].ID != 1 || got[1].ID != 2 || got[2].ID != 3 || got[3].ID != 4 {
-		t.Errorf("默认运营商排序错误: %v", []int64{got[0].ID, got[1].ID, got[2].ID, got[3].ID})
+	if len(got) != 3 || got[0].ID != 1 || got[1].ID != 3 || got[2].ID != 4 {
+		t.Errorf("默认视图应只含未终止的 1,3,4, got %+v", got)
 	}
 	// 显式 carrier 与空值同序
 	if got = filterSortNumbers(nums, "", "", "carrier"); got[0].ID != 1 {
 		t.Errorf("carrier 排序应与默认一致, got %d", got[0].ID)
 	}
-	// 到期升序：显式 expiry_asc 才按到期日（无需保号排最后）
+	// 到期升序：显式 expiry_asc 才按到期日（无需保号排最后；已终止同样被默认视图排除）
 	got = filterSortNumbers(nums, "", "", "expiry_asc")
-	if got[0].ID != 2 || got[1].ID != 1 || got[2].ID != 3 || got[3].ID != 4 {
+	if len(got) != 3 || got[0].ID != 3 || got[1].ID != 1 || got[2].ID != 4 {
 		t.Errorf("到期升序错误: %v", []int64{got[0].ID, got[1].ID, got[2].ID, got[3].ID})
 	}
 	// 降序 + 最新添加
 	got = filterSortNumbers(nums, "", "", "expiry_desc")
-	if got[0].ID != 3 {
-		t.Errorf("到期降序应 ID=3 在前, got %d", got[0].ID)
+	if got[0].ID != 1 {
+		t.Errorf("到期降序应 ID=1 在前（2099-01-01 最晚）, got %d", got[0].ID)
 	}
 	got = filterSortNumbers(nums, "", "", "created_desc")
 	if got[0].ID != 4 {
