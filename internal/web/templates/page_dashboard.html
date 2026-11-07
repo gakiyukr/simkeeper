@@ -1,203 +1,161 @@
 {{define "page_dashboard"}}{{template "head" .}}
-<!-- Flowbite 試點頁：內容區全部使用 Tailwind utilities + Flowbite 組件語法；
-     側欄/頂欄骨架（head 模板）待全站遷移階段統一更換。 -->
-<div class="mb-6 flex flex-wrap items-end justify-between gap-3">
+<div class="page-head">
   <div>
-    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">号码管理</h1>
-    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">共 {{.Content.TotalAll}} 个号码 · 到期前按各号码的提醒窗口推送通知</p>
+    <h1 class="page-title">号码管理</h1>
+    <p class="page-desc">共 {{.Content.TotalAll}} 个号码 · 到期前按各号码的提醒窗口推送通知</p>
   </div>
-  <a href="/numbers/new"
-     class="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">
-    {{template "ico_plus"}}添加号码
-  </a>
-</div>
-
-<div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-  <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-    <div class="text-sm font-medium text-gray-500 dark:text-gray-400">在管号码</div>
-    <div class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white">{{.Content.TotalAll}}</div>
-  </div>
-  <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-    <div class="text-sm font-medium text-gray-500 dark:text-gray-400">7 天内到期</div>
-    <div class="mt-1 text-3xl font-semibold text-amber-600 dark:text-amber-400">{{.Content.Expiring7}}</div>
-  </div>
-  <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-    <div class="text-sm font-medium text-gray-500 dark:text-gray-400">使用中</div>
-    <div class="mt-1 text-3xl font-semibold text-green-600 dark:text-green-400">{{.Content.ActiveCnt}}</div>
+  <div class="page-actions">
+    <a class="btn" href="/numbers/new">{{template "ico_plus"}}添加号码</a>
   </div>
 </div>
 
-<div class="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-  <div class="flex flex-wrap items-center gap-2 border-b border-gray-200 p-4 dark:border-gray-700">
-    <a class="rounded-full px-3 py-1.5 text-xs font-medium transition-colors {{if eq .Content.Cat ""}}bg-gray-900 text-white dark:bg-white dark:text-gray-900{{else}}bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600{{end}}"
-       href="/{{querySuffix .Content.Search .Content.Sort ""}}">全部 <b>{{.Content.Counts.Active}}</b></a>
-    <a class="rounded-full px-3 py-1.5 text-xs font-medium transition-colors {{if eq .Content.Cat "cycle"}}bg-gray-900 text-white dark:bg-white dark:text-gray-900{{else}}bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600{{end}}"
-       href="/{{querySuffix .Content.Search .Content.Sort "cycle"}}">需要周期性保号 <b>{{.Content.Counts.Cycle}}</b></a>
-    <a class="rounded-full px-3 py-1.5 text-xs font-medium transition-colors {{if eq .Content.Cat "none"}}bg-gray-900 text-white dark:bg-white dark:text-gray-900{{else}}bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600{{end}}"
-       href="/{{querySuffix .Content.Search .Content.Sort "none"}}">无需保号 <b>{{.Content.Counts.None}}</b></a>
-    <a class="rounded-full px-3 py-1.5 text-xs font-medium transition-colors {{if eq .Content.Cat "expired"}}bg-gray-900 text-white dark:bg-white dark:text-gray-900{{else}}bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600{{end}}"
-       href="/{{querySuffix .Content.Search .Content.Sort "expired"}}">已过期 <b>{{.Content.Counts.Expired}}</b></a>
-    <a class="rounded-full px-3 py-1.5 text-xs font-medium transition-colors {{if eq .Content.Cat "inactive"}}bg-gray-900 text-white dark:bg-white dark:text-gray-900{{else}}bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600{{end}}"
-       href="/{{querySuffix .Content.Search .Content.Sort "inactive"}}">已终止 <b>{{.Content.Counts.Lost}}</b></a>
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-label">在管号码</div><div class="stat-num">{{.Content.TotalAll}}</div></div>
+  <div class="stat-card"><div class="stat-label">7 天内到期</div><div class="stat-num warn">{{.Content.Expiring7}}</div></div>
+  <div class="stat-card"><div class="stat-label">使用中</div><div class="stat-num ok">{{.Content.ActiveCnt}}</div></div>
+</div>
+
+<div class="card">
+  <div class="cat-chips">
+    <a class="chip {{if eq .Content.Cat ""}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort ""}}">全部 <b>{{.Content.Counts.Active}}</b></a>
+    <a class="chip {{if eq .Content.Cat "cycle"}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort "cycle"}}">需要周期性保号 <b>{{.Content.Counts.Cycle}}</b></a>
+    <a class="chip {{if eq .Content.Cat "none"}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort "none"}}">无需保号 <b>{{.Content.Counts.None}}</b></a>
+    <a class="chip {{if eq .Content.Cat "expired"}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort "expired"}}">已过期 <b>{{.Content.Counts.Expired}}</b></a>
+    <a class="chip {{if eq .Content.Cat "inactive"}}active{{end}}" href="/{{querySuffix .Content.Search .Content.Sort "inactive"}}">已终止 <b>{{.Content.Counts.Lost}}</b></a>
   </div>
-  <form method="get" action="/" class="flex flex-wrap items-center gap-3 border-b border-gray-200 p-4 dark:border-gray-700">
+  <form method="get" action="/" class="toolbar">
     {{if .Content.Cat}}<input type="hidden" name="cat" value="{{.Content.Cat}}">{{end}}
-    <input type="text" name="q" value="{{.Content.Search}}" placeholder="搜索号码 / 国家 / 运营商 / 备注"
-           class="block w-full max-w-xs rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400">
-    <select name="sort"
-            class="block rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+    <input class="input" type="text" name="q" value="{{.Content.Search}}" placeholder="搜索号码 / 国家 / 运营商 / 备注">
+    <select class="select auto" name="sort">
       <option value="carrier" {{if or (eq .Content.Sort "carrier") (eq .Content.Sort "")}}selected{{end}}>运营商名称</option>
       <option value="country" {{if eq .Content.Sort "country"}}selected{{end}}>国家代码 A-Z</option>
       <option value="expiry_asc" {{if eq .Content.Sort "expiry_asc"}}selected{{end}}>到期日 ↑</option>
       <option value="expiry_desc" {{if eq .Content.Sort "expiry_desc"}}selected{{end}}>到期日 ↓</option>
       <option value="created_desc" {{if eq .Content.Sort "created_desc"}}selected{{end}}>最新添加</option>
     </select>
-    <button type="submit"
-            class="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-900 hover:bg-gray-100 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white dark:focus:ring-gray-700">
-      {{template "ico_search"}}筛选
-    </button>
+    <button type="submit" class="btn btn-outline btn-sm">{{template "ico_search"}}筛选</button>
   </form>
-
-  {{if not .Content.Numbers}}
-  <div class="p-10 text-center text-sm text-gray-500 dark:text-gray-400">
-    {{if or .Content.Search .Content.Cat}}没有匹配的号码{{else}}还没有号码，点击右上角添加。{{end}}
-  </div>
-  {{else}}
-  <div class="overflow-x-auto">
-    <table class="tblf w-full text-left text-sm text-gray-500 dark:text-gray-400">
-      <thead class="bg-gray-50 text-xs uppercase text-gray-700 dark:bg-gray-700 dark:text-gray-400">
-        <tr>
-          <th scope="col" class="px-4 py-3">运营商</th>
-          <th scope="col" class="px-4 py-3">号码</th>
-          <th scope="col" class="px-4 py-3">下次续费</th>
-          <th scope="col" class="px-4 py-3">剩余</th>
-          <th scope="col" class="px-4 py-3">状态</th>
-          <th scope="col" class="px-4 py-3">续费周期</th>
-          <th scope="col" class="px-4 py-3">安装设备</th>
-          <th scope="col" class="px-4 py-3 text-right">操作</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{range .Content.Numbers}}
-        <tr class="border-b border-gray-200 last:border-0 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700/50">
-          <td class="px-4 py-3">
-            <span class="whitespace-nowrap">{{flagHTML .CountryCode}}{{if .Carrier}} <span class="font-medium text-gray-900 dark:text-white">{{.Carrier}}</span>{{end}}</span>
-            {{if .Notes}}<br><small class="text-xs text-gray-400 dark:text-gray-500" title="备注">{{snippet .Notes}}</small>{{end}}
-          </td>
-          <td class="whitespace-nowrap px-4 py-3">
-            <span class="font-mono text-sm font-semibold text-gray-900 dark:text-white">{{fmtPhone .CountryCode .PhoneNumber}}</span>
-            {{range secondaryLines .}}<br><small class="text-xs text-gray-400 dark:text-gray-500" title="副卡">副 {{.}}</small>{{end}}
-          </td>
-          <td class="px-4 py-3">
-            {{if .NoKeepalive}}<span class="text-gray-400 dark:text-gray-500">—</span>{{else}}{{.ExpiryDate}}{{if gt (cycleProgress .) -1}}
-            <div class="mt-1.5 h-1.5 w-28 rounded-full bg-gray-200 dark:bg-gray-700" title="当前周期进度 {{cycleProgress .}}%">
-              <div class="h-1.5 rounded-full {{fillClass (daysLeft .)}}" style="width:{{cycleProgress .}}%"></div>
-            </div>
-            {{end}}{{end}}
-          </td>
-          <td class="px-4 py-3">
-            {{if .NoKeepalive}}<span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">无需保号</span>{{else}}<span class="{{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span>{{if gt .ReminderIntervalDays 1}}<br><small class="text-xs text-gray-400 dark:text-gray-500">每 {{.ReminderIntervalDays}} 天提醒</small>{{end}}{{end}}
-          </td>
-          <td class="px-4 py-3">
-            {{if ne .Status "inactive"}}<span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-300">使用中</span>{{else}}<span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">已终止</span>{{end}}
-          </td>
-          <td class="px-4 py-3">
-            {{if gt .AutoExpiryPeriod 0}}<span class="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-300">{{.AutoExpiryPeriod}} 天周期</span>{{else}}<span class="text-gray-400 dark:text-gray-500">—</span>{{end}}
-          </td>
-          <td class="px-4 py-3">
-            {{if .DeviceID}}<span class="dev-badge dev-c{{devColor .DeviceID}}" title="安装设备">{{index $.Content.DeviceNames .DeviceID}}</span>
-            {{else if eq .SimType "physical"}}<span class="inline-flex items-center rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-800 dark:bg-purple-900 dark:text-purple-300" title="实体卡（未指定安装设备）">实体卡</span>
-            {{else}}<span class="text-gray-400 dark:text-gray-500">—</span>{{end}}
-          </td>
-          <td class="px-4 py-3">
-            <div class="actionsf flex items-center justify-end gap-1.5">
-              {{if ne .Status "inactive"}}
-              <form method="post" action="/numbers/{{.ID}}/status" class="inline">
-                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <input type="hidden" name="status" value="inactive">
-                <button type="submit" class="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700" title="终止：仅作记录，不再提醒">终止</button>
-              </form>
-              {{else}}
-              <form method="post" action="/numbers/{{.ID}}/status" class="inline">
-                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <input type="hidden" name="status" value="active">
-                <button type="submit" class="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700" title="撤销终止，恢复为使用中">撤销</button>
-              </form>
-              {{end}}
-              {{if gt .AutoExpiryPeriod 0}}
-              <button type="button" class="whitespace-nowrap rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-900 hover:bg-gray-100 hover:text-blue-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white"
-                      title="手动保号：选择新到期日的计算方式" onclick="skRenewOpen({{.ID}})">已续费</button>
-              <dialog id="renew-d{{.ID}}" data-phone="{{fmtPhone .CountryCode .PhoneNumber}}"
-                      class="m-auto w-[calc(100%-2rem)] max-w-lg rounded-xl border border-gray-200 bg-white p-0 shadow-2xl dark:border-gray-700 dark:bg-gray-800"
-                      onclick="if(event.target===this)this.close()">
-                <div class="p-6">
-                  <div id="renew-s1-{{.ID}}">
-                    <h4 class="text-base font-semibold text-gray-900 dark:text-white">手动保号</h4>
-                    <p class="mt-1.5 text-sm leading-6 text-gray-500 dark:text-gray-400">新到期日按哪种方式计算？按活跃间隔计算的运营商（如 giffgaff）选「从今天重新起算」；在原有效期上叠加的运营商（如 AIS）选「在原到期日上顺延」。</p>
-                    <button type="button" class="mt-3 w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-900 hover:bg-gray-100 hover:text-blue-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 dark:hover:text-white"
-                            data-mode="today" data-method="从今天重新起算" data-date="{{todayPlus .AutoExpiryPeriod}}"
-                            onclick="skRenewPick({{.ID}}, this)">从今天重新起算（{{todayPlus .AutoExpiryPeriod}} 到期）</button>
-                    <button type="button" class="mt-2 w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-900 hover:bg-gray-100 hover:text-blue-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 dark:hover:text-white"
-                            data-mode="extend" data-method="在原到期日上顺延" data-date="{{expiryPlus .}}"
-                            onclick="skRenewPick({{.ID}}, this)">在原到期日上顺延（{{expiryPlus .}} 到期）</button>
-                    <button type="button" class="mt-2 w-full rounded-lg px-4 py-2.5 text-sm font-medium text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700" onclick="document.getElementById('renew-d{{.ID}}').close()">取消</button>
+  <div class="card-content flush">
+    {{if not .Content.Numbers}}
+    <div class="empty">{{if or .Content.Search .Content.Cat}}没有匹配的号码{{else}}还没有号码，点击右上角添加。{{end}}</div>
+    {{else}}
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr>
+          <th>运营商</th><th>号码</th><th>下次续费</th><th>剩余</th><th>状态</th>
+          <th>续费周期</th><th>安装设备</th><th style="text-align:right">操作</th>
+        </tr></thead>
+        <tbody>
+          {{range .Content.Numbers}}
+          <tr>
+            <td>
+              {{flagHTML .CountryCode}}{{if .Carrier}} <span class="carrier-name">{{.Carrier}}</span>{{end}}
+              {{if .Notes}}<br><small class="muted" title="备注">{{snippet .Notes}}</small>{{end}}
+            </td>
+            <td class="nowrap">
+              <span class="mono-strong">{{fmtPhone .CountryCode .PhoneNumber}}</span>
+              {{range secondaryLines .}}<br><small class="muted" title="副卡">副 {{.}}</small>{{end}}
+            </td>
+            <td>
+              {{if .NoKeepalive}}<span class="muted">—</span>{{else}}{{.ExpiryDate}}{{if gt (cycleProgress .) -1}}
+              <div class="progress" title="当前周期进度 {{cycleProgress .}}%"><i class="{{fillClass (daysLeft .)}}" style="width:{{cycleProgress .}}%"></i></div>
+              {{end}}{{end}}
+            </td>
+            <td>{{if .NoKeepalive}}<span class="badge-sec">无需保号</span>{{else}}<span class="badge {{daysBadge (daysLeft .)}}">{{if lt (daysLeft .) 0}}已过期{{else}}{{daysLeft .}} 天{{end}}</span>{{if gt .ReminderIntervalDays 1}}<br><small class="muted">每 {{.ReminderIntervalDays}} 天提醒</small>{{end}}{{end}}</td>
+            <td>{{if ne .Status "inactive"}}<span class="badge badge-ok">使用中</span>{{else}}<span class="badge badge-muted">已终止</span>{{end}}</td>
+            <td>{{if gt .AutoExpiryPeriod 0}}<span class="badge-sec">{{.AutoExpiryPeriod}} 天周期</span>{{else}}<span class="muted">—</span>{{end}}</td>
+            <td>{{if .DeviceID}}<span class="dev-badge dev-c{{devColor .DeviceID}}" title="安装设备">{{index $.Content.DeviceNames .DeviceID}}</span>
+            {{else if eq .SimType "physical"}}<span class="badge-sec" title="实体卡（未指定安装设备）">实体卡</span>
+            {{else}}<span class="muted">—</span>{{end}}</td>
+            <td>
+              <div class="actions">
+                {{if ne .Status "inactive"}}
+                <form method="post" action="/numbers/{{.ID}}/status" class="inline">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="status" value="inactive">
+                  <button type="submit" class="btn btn-sm btn-ghost" title="终止：仅作记录，不再提醒">终止</button>
+                </form>
+                {{else}}
+                <form method="post" action="/numbers/{{.ID}}/status" class="inline">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="status" value="active">
+                  <button type="submit" class="btn btn-sm btn-ghost" title="撤销终止，恢复为使用中">撤销</button>
+                </form>
+                {{end}}
+                {{if gt .AutoExpiryPeriod 0}}
+                <button type="button" class="btn btn-sm btn-outline" title="手动保号：选择新到期日的计算方式"
+                        onclick="skRenewOpen({{.ID}})">已续费</button>
+                <dialog id="renew-d{{.ID}}" class="renew-dialog" data-phone="{{fmtPhone .CountryCode .PhoneNumber}}"
+                        onclick="if(event.target===this)this.close()">
+                  <div class="renew-body">
+                    <div id="renew-s1-{{.ID}}">
+                      <h4>手动保号</h4>
+                      <p class="renew-hint">新到期日按哪种方式计算？按活跃间隔计算的运营商（如 giffgaff）选「从今天重新起算」；在原有效期上叠加的运营商（如 AIS）选「在原到期日上顺延」。</p>
+                      <button type="button" class="btn btn-outline renew-btn"
+                              data-mode="today" data-method="从今天重新起算" data-date="{{todayPlus .AutoExpiryPeriod}}"
+                              onclick="skRenewPick({{.ID}}, this)">从今天重新起算（{{todayPlus .AutoExpiryPeriod}} 到期）</button>
+                      <button type="button" class="btn btn-outline renew-btn"
+                              data-mode="extend" data-method="在原到期日上顺延" data-date="{{expiryPlus .}}"
+                              onclick="skRenewPick({{.ID}}, this)">在原到期日上顺延（{{expiryPlus .}} 到期）</button>
+                      <button type="button" class="btn btn-ghost renew-btn" onclick="document.getElementById('renew-d{{.ID}}').close()">取消</button>
+                    </div>
+                    <div id="renew-s2-{{.ID}}" hidden>
+                      <h4>确认保号</h4>
+                      <p class="renew-hint" id="renew-txt-{{.ID}}"></p>
+                      <form method="post" action="/numbers/{{.ID}}/renew" class="renew-opt">
+                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                        <input type="hidden" name="mode" id="renew-mode-{{.ID}}" value="">
+                        <button type="submit" class="btn btn-destructive renew-btn">确认，我已完成保号</button>
+                      </form>
+                      <button type="button" class="btn btn-ghost renew-btn" onclick="skRenewBack({{.ID}})">返回</button>
+                    </div>
                   </div>
-                  <div id="renew-s2-{{.ID}}" hidden>
-                    <h4 class="text-base font-semibold text-gray-900 dark:text-white">确认保号</h4>
-                    <p class="mt-1.5 text-sm leading-6 text-gray-500 dark:text-gray-400" id="renew-txt-{{.ID}}"></p>
-                    <form method="post" action="/numbers/{{.ID}}/renew">
-                      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                      <input type="hidden" name="mode" id="renew-mode-{{.ID}}" value="">
-                      <button type="submit" class="mt-3 w-full rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-300 dark:focus:ring-red-800">确认，我已完成保号</button>
-                    </form>
-                    <button type="button" class="mt-2 w-full rounded-lg px-4 py-2.5 text-sm font-medium text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700" onclick="skRenewBack({{.ID}})">返回</button>
-                  </div>
-                </div>
-              </dialog>
-              {{end}}
-              <a class="whitespace-nowrap rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-900 hover:bg-gray-100 hover:text-blue-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white" href="/numbers/{{.ID}}/edit">编辑</a>
-              <form method="post" action="/numbers/{{.ID}}/delete" class="inline"
-                    onsubmit="return confirm('确定删除号码 {{fmtPhone .CountryCode .PhoneNumber}} 吗？此操作不可恢复。')">
-                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <button type="submit" class="whitespace-nowrap rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-300 dark:focus:ring-red-800">删除</button>
-              </form>
-            </div>
-          </td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
+                </dialog>
+                {{end}}
+                <a class="btn btn-sm btn-outline" href="/numbers/{{.ID}}/edit">编辑</a>
+                <form method="post" action="/numbers/{{.ID}}/delete" class="inline"
+                      onsubmit="return confirm('确定删除号码 {{fmtPhone .CountryCode .PhoneNumber}} 吗？此操作不可恢复。')">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <button type="submit" class="btn btn-sm btn-destructive">删除</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{end}}
   </div>
-  {{end}}
 </div>
 
-<div class="mt-6 rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-  <div class="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
-    <h2 class="text-base font-semibold text-gray-900 dark:text-white">最近通知</h2>
-    <a href="/notifications" class="text-sm font-medium text-blue-600 hover:underline dark:text-blue-500">全部历史 →</a>
+<div class="card">
+  <div class="card-header row">
+    <div><h2 class="card-title">最近通知</h2></div>
+    <a href="/notifications" class="muted" style="font-size:.8125rem">全部历史 →</a>
   </div>
-  {{if not .Content.RecentNotifs}}
-  <div class="p-10 text-center text-sm text-gray-500 dark:text-gray-400">暂无通知记录</div>
-  {{else}}
-  <div class="overflow-x-auto">
-    <table class="tblf w-full text-left text-sm text-gray-500 dark:text-gray-400">
-      <thead class="bg-gray-50 text-xs uppercase text-gray-700 dark:bg-gray-700 dark:text-gray-400">
-        <tr><th scope="col" class="px-4 py-3">时间</th><th scope="col" class="px-4 py-3">类型</th><th scope="col" class="px-4 py-3">渠道</th><th scope="col" class="px-4 py-3">内容</th><th scope="col" class="px-4 py-3">状态</th></tr>
-      </thead>
-      <tbody>
-        {{range .Content.RecentNotifs}}
-        <tr class="border-b border-gray-200 last:border-0 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700/50">
-          <td class="whitespace-nowrap px-4 py-3">{{.CreatedAt}}</td>
-          <td class="px-4 py-3">{{typeText .Type}}</td>
-          <td class="px-4 py-3"><span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">{{channelText .Channel}}</span></td>
-          <td class="max-w-xs truncate px-4 py-3" title="{{.Message}}">{{snippet .Message}}</td>
-          <td class="px-4 py-3"><span class="{{statusBadge .Status}}">{{statusTextN .Status}}</span></td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
+  <div class="card-content flush">
+    {{if not .Content.RecentNotifs}}
+    <div class="empty">暂无通知记录</div>
+    {{else}}
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>时间</th><th>类型</th><th>渠道</th><th>内容</th><th>状态</th></tr></thead>
+        <tbody>
+          {{range .Content.RecentNotifs}}
+          <tr>
+            <td class="muted" style="white-space:nowrap">{{.CreatedAt}}</td>
+            <td>{{typeText .Type}}</td>
+            <td><span class="badge-sec">{{channelText .Channel}}</span></td>
+            <td class="muted"><span title="{{.Message}}">{{snippet .Message}}</span></td>
+            <td><span class="badge {{statusBadge .Status}}">{{statusTextN .Status}}</span></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{end}}
   </div>
-  {{end}}
 </div>
 <script>
 function skRenewOpen(id) {

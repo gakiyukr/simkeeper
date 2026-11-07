@@ -21,5 +21,4 @@ dev.db-wal
 dev.db-shm
 dev.log
 /dist/
-ui-build/node_modules/
-*.exe~
+/ui-build/
