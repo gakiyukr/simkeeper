@@ -16,3 +16,7 @@
 @plugin "flowbite/plugin" ;
 
 @source "../internal/web/templates";
+
+/* 試點頁專屬命名空間（與舊 .tbl/.actions 隔離，避免舊樣式表覆蓋新 utility） */
+.tblf th { white-space: nowrap; }
+.actionsf { flex-wrap: nowrap; }
