@@ -941,17 +941,18 @@ func (a *App) HandleNotificationHistory(w http.ResponseWriter, r *http.Request) 
 	a.render(w, http.StatusOK, "page_notifications", d)
 }
 
-// 剩余天数徽标配色（模板直接调用）。
+// 剩余天数徽标配色（模板直接调用；Flowbite 試點頁 class，含深色變體）。
+// 已过期附加 badge-blink（sk_css 中的闪烁动画）。
 func daysBadge(days int) string {
 	switch {
 	case days < 0:
-		return "badge-danger badge-blink" // 已过期：红色闪烁提示
+		return "inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900 dark:text-red-300 badge-blink"
 	case days <= 3:
-		return "badge-danger"
+		return "inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900 dark:text-red-300"
 	case days <= 7:
-		return "badge-warning"
+		return "inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300"
 	default:
-		return "badge-ok"
+		return "inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-300"
 	}
 }
 
@@ -1050,11 +1051,11 @@ var funcMap = template.FuncMap{
 	"statusBadge": func(s string) string {
 		switch s {
 		case "sent":
-			return "badge-ok"
+			return "inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-300"
 		case "failed":
-			return "badge-danger"
+			return "inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900 dark:text-red-300"
 		}
-		return "badge-muted"
+		return "inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-300"
 	},
 	"statusTextN": func(s string) string {
 		switch s {
@@ -1099,11 +1100,11 @@ var funcMap = template.FuncMap{
 	"fillClass": func(days int) string {
 		switch {
 		case days <= 3:
-			return "fill-err"
+			return "bg-red-500"
 		case days <= 7:
-			return "fill-warn"
+			return "bg-yellow-400"
 		}
-		return "fill-ok"
+		return "bg-green-500"
 	},
 	// querySuffix 拼接列表链接的查询串（chips 切换分类时保留搜索词与排序）。
 	"querySuffix": func(q, sort, cat string) template.URL {

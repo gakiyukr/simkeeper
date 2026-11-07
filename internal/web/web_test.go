@@ -231,7 +231,7 @@ func TestDashboardTemplateRenders(t *testing.T) {
 	html := buf.String()
 
 	// 列序：运营商表头在号码之前
-	ih, jh := strings.Index(html, "<th>运营商</th>"), strings.Index(html, "<th>号码</th>")
+	ih, jh := strings.Index(html, "运营商</th>"), strings.Index(html, "号码</th>")
 	if ih < 0 || jh < 0 || jh < ih {
 		t.Errorf("表头应为 运营商|号码 顺序, i=%d j=%d", ih, jh)
 	}
@@ -266,7 +266,7 @@ func TestDashboardTemplateRenders(t *testing.T) {
 	if !strings.Contains(html, "MESIM购买 主号") {
 		t.Error("备注应显示在运营商单元格")
 	}
-	if !strings.Contains(html, `<th>安装设备</th>`) || !strings.Contains(html, "Pixel 8") {
+	if !strings.Contains(html, "安装设备") || !strings.Contains(html, "Pixel 8") {
 		t.Error("安装设备列应显示设备名")
 	}
 	if !strings.Contains(html, "dev-badge dev-c3") {

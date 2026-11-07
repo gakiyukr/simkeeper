@@ -11,3 +11,8 @@ var tmplFS embed.FS
 //
 //go:embed flags/*.svg
 var flagFS embed.FS
+
+// assetFS 内嵌前端静态资源（Flowbite 定制构建产物；重建方式见 ui-build/input.css）。
+//
+//go:embed assets/*.css assets/*.js
+var assetFS embed.FS

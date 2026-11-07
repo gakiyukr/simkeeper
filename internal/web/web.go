@@ -205,6 +205,29 @@ func (a *App) secureHeaders(next http.Handler) http.Handler {
 	})
 }
 
+// handleAsset GET /assets/{name}：内嵌前端构建产物（CSS/JS），白名单校验文件名，
+// 公开可长期缓存（内容随版本变化，发布即换）。
+func (a *App) handleAsset(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	switch name {
+	case "simkeeper.css", "flowbite.min.js":
+		b, err := assetFS.ReadFile("assets/" + name)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		if strings.HasSuffix(name, ".css") {
+			w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		} else {
+			w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		}
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		_, _ = w.Write(b)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
 // render 渲染指定页面模板。
 func (a *App) render(w http.ResponseWriter, status int, name string, data any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

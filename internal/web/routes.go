@@ -21,6 +21,8 @@ func (a *App) Routes() http.Handler {
 	// 国旗 SVG：公开静态资源（代码按白名单校验），无需登录。
 	// ServeMux 通配符必须独占整段，.svg 后缀在处理器里剥离校验。
 	mux.HandleFunc("GET /flags/{code}", a.handleFlagSVG)
+	// 前端构建产物（Flowbite 定制 CSS/JS）：公开可缓存
+	mux.HandleFunc("GET /assets/{name}", a.handleAsset)
 	mux.Handle("POST /login/totp", a.ensureSessionMW(a.csrfProtect(a.HandleLoginTOTP)))
 	mux.Handle("POST /logout", a.csrfProtect(a.HandleLogout))
 	mux.HandleFunc("GET /setup", a.handleSetupPage)
