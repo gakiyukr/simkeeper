@@ -11,6 +11,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"simkeeper/internal/auth"
@@ -45,9 +46,16 @@ func New(database *db.DB) *Jobs {
 	}
 }
 
+// runMu 確保行程內定時排程與管理後台手動觸發不會並發重疊執行，
+// 避免重複發送保號提醒或覆蓋累計統計數。
+var runMu sync.Mutex
+
 // RunOnce 执行一轮完整任务，返回发送统计与逐行日志（管理页可展示）。
 // 任何一步失败只记录日志继续执行，保证清理与统计不会被单点故障卡死。
 func (j *Jobs) RunOnce(now time.Time) (sent, failed int, lines []string) {
+	runMu.Lock()
+	defer runMu.Unlock()
+
 	logf := func(format string, args ...any) {
 		line := now.Format("2006-01-02 15:04:05") + " " + fmt.Sprintf(format, args...)
 		lines = append(lines, line)

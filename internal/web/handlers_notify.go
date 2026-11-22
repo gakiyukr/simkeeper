@@ -153,12 +153,17 @@ func (a *App) saveNotifyConfig(w http.ResponseWriter, r *http.Request, userID in
 		cfg.TGCallAPIHash = h
 	}
 
+	// 驗證或儲存失敗時保留當前表單狀態重新渲染
+	failRender := func(msg string) {
+		d.Flash, d.FlashIsErr = msg, true
+		d.Content = map[string]any{"Cfg": toPublic(cfg)}
+		a.render(w, http.StatusOK, "page_notify_config", *d)
+	}
+
 	// tdata 上传：有文件就尝试导入会话（与 tg-login 写入同一个字段）
 	uploadedSession, importedUID, importErr := a.readTDataUpload(r)
 	if importErr != "" {
-		d.Flash, d.FlashIsErr = importErr, true
-		d.Content = map[string]any{"Cfg": toPublic(cfg)}
-		a.render(w, http.StatusOK, "page_notify_config", *d)
+		failRender(importErr)
 		return
 	}
 	if uploadedSession != "" {
@@ -167,28 +172,23 @@ func (a *App) saveNotifyConfig(w http.ResponseWriter, r *http.Request, userID in
 
 	// 渠道启用时的完整性校验
 	if cfg.EmailEnabled && (cfg.EmailSMTPHost == "" || cfg.EmailFromEmail == "") {
-		d.Flash, d.FlashIsErr = "启用邮件渠道需填写 SMTP 主机与发件邮箱", true
-		a.render(w, http.StatusOK, "page_notify_config", *d)
+		failRender("启用邮件渠道需填写 SMTP 主机与发件邮箱")
 		return
 	}
 	if cfg.TelegramEnabled && (cfg.TelegramBotToken == "" || cfg.TelegramChatID == "") {
-		d.Flash, d.FlashIsErr = "启用 Telegram 渠道需填写 Bot Token 与 Chat ID", true
-		a.render(w, http.StatusOK, "page_notify_config", *d)
+		failRender("启用 Telegram 渠道需填写 Bot Token 与 Chat ID")
 		return
 	}
 	if cfg.WxPusherEnabled && (cfg.WxPusherAppToken == "" || cfg.WxPusherUID == "") {
-		d.Flash, d.FlashIsErr = "启用 WxPusher 渠道需填写 AppToken 与 UID", true
-		a.render(w, http.StatusOK, "page_notify_config", *d)
+		failRender("启用 WxPusher 渠道需填写 AppToken 与 UID")
 		return
 	}
 	if cfg.FeishuEnabled && cfg.FeishuWebhook == "" {
-		d.Flash, d.FlashIsErr = "启用飞书渠道需填写机器人 Webhook 地址", true
-		a.render(w, http.StatusOK, "page_notify_config", *d)
+		failRender("启用飞书渠道需填写机器人 Webhook 地址")
 		return
 	}
 	if cfg.DingTalkEnabled && cfg.DingTalkWebhook == "" {
-		d.Flash, d.FlashIsErr = "启用钉钉渠道需填写机器人 Webhook 地址", true
-		a.render(w, http.StatusOK, "page_notify_config", *d)
+		failRender("启用钉钉渠道需填写机器人 Webhook 地址")
 		return
 	}
 	if cfg.TGCallEnabled && (cfg.TGCallAPIID == 0 || cfg.TGCallAPIHash == "" ||
@@ -197,13 +197,11 @@ func (a *App) saveNotifyConfig(w http.ResponseWriter, r *http.Request, userID in
 		if cfg.TGCallSession == "" {
 			missing += "，且需先上传 tdata 或在服务器运行 simkeeper tg-login 完成登录"
 		}
-		d.Flash, d.FlashIsErr = "启用 TG 电话渠道需填写 "+missing, true
-		a.render(w, http.StatusOK, "page_notify_config", *d)
+		failRender("启用 TG 电话渠道需填写 " + missing)
 		return
 	}
 	if err := a.Notify.SaveConfig(cfg); err != nil {
-		d.Flash, d.FlashIsErr = "保存失败，请重试", true
-		a.render(w, http.StatusOK, "page_notify_config", *d)
+		failRender("保存失败，请重试")
 		return
 	}
 	msg := "通知配置已保存"

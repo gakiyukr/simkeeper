@@ -107,7 +107,7 @@ func (s *SessionStore) Get(token string) (*Session, error) {
 	if uid.Valid {
 		sess.UserID = uid.Int64
 	}
-	expires, err := time.Parse(time.DateTime, expiresStr)
+	expires, err := time.ParseInLocation(time.DateTime, expiresStr, time.Local)
 	if err != nil {
 		return nil, fmt.Errorf("解析会话过期时间失败: %w", err)
 	}

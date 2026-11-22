@@ -624,3 +624,22 @@ func TestDevicesCRUDAndDetach(t *testing.T) {
 		t.Errorf("列表应只剩 1 台, got %+v %v", devs, err)
 	}
 }
+
+// TestDaysLeftDST 驗證在含夏令時（DST）的時區跨春季轉換日時，
+// DaysLeft 仍按日曆日精確計算，不會因少一小時而截斷少算一天。
+func TestDaysLeftDST(t *testing.T) {
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skipf("無法載入 America/New_York 時區: %v", err)
+	}
+	// 2026-03-08 為美東夏令時開始日（凌晨 02:00 跳至 03:00，當日僅 23 小時）
+	now := time.Date(2026, 3, 7, 23, 0, 0, 0, loc)
+	n := PhoneNumber{ExpiryDate: "2026-03-09"}
+	if got := n.DaysLeft(now); got != 2 {
+		t.Errorf("跨 DST 剩餘天數 = %d, want 2", got)
+	}
+	nSame := PhoneNumber{ExpiryDate: "2026-03-07"}
+	if got := nSame.DaysLeft(now); got != 0 {
+		t.Errorf("當天到期剩餘天數 = %d, want 0", got)
+	}
+}

@@ -316,13 +316,14 @@ func (r *NumberRepo) ListExpiring() ([]PhoneNumber, error) {
 	return out, rows.Err()
 }
 
-// DaysLeft 计算距离到期日的天数（到期日当天为 0）。
-// 解析失败返回 -1，调用方按「不提醒」处理。
+// DaysLeft 計算距離到期日的天數（到期日當天為 0）。
+// 統一轉為 UTC 日曆日相減，避免夏令時（DST）跨日少算一小時導致天數截斷。
+// 解析失敗返回 -1，呼叫方按「不提醒」處理。
 func (n *PhoneNumber) DaysLeft(now time.Time) int {
-	expiry, err := time.ParseInLocation("2006-01-02", n.ExpiryDate, now.Location())
+	expiry, err := time.Parse("2006-01-02", n.ExpiryDate)
 	if err != nil {
 		return -1
 	}
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	return int(expiry.Sub(today).Hours() / 24)
+	todayUTC := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	return int(expiry.Sub(todayUTC) / (24 * time.Hour))
 }

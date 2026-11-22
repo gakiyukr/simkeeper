@@ -13,6 +13,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -105,9 +106,9 @@ func PlaceMissedCall(ctx context.Context, p Params, store *SessionStore) (newSes
 	if runErr != nil {
 		return "", runErr
 	}
-	// 会话可能被 gotd 更新（auth key 轮换等），交调用方回存
+	// 會話可能被 gotd 更新（auth key 輪換等），編碼為 Base64 交呼叫方比對回存
 	if s, err := store.LoadSession(ctx); err == nil && len(s) > 0 {
-		return string(s), nil
+		return base64.StdEncoding.EncodeToString(s), nil
 	}
 	return "", nil
 }
