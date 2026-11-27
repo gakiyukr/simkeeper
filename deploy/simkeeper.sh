@@ -47,10 +47,10 @@ download_binary() {
   mv "${dest}.tmp" "$dest"
 }
 
-# service_port 从 systemd 单元里解析 -addr 的端口（健康检查用）。
+# service_port 從 systemd 單元裡解析 -addr 的埠號（相容 127.0.0.1:PORT / localhost:PORT / :PORT / -addr=...）。
 service_port() {
   local port
-  port=$(sed -n 's/.*-addr 127\.0\.0\.1:\([0-9]*\).*/\1/p' "$SERVICE_FILE" 2>/dev/null | head -1)
+  port=$(sed -n 's/.*-addr[= ][^ ]*:\([0-9][0-9]*\).*/\1/p' "$SERVICE_FILE" 2>/dev/null | head -1)
   echo "${port:-8090}"
 }
 
@@ -149,10 +149,15 @@ cmd_update() {
 
   log "停止服务并备份..."
   systemctl stop "$SERVICE"
-  cp -a "${DATA_DIR}/simkeeper.db" "${DATA_DIR}/simkeeper.db.bak-${stamp}"
-  [ -f "${DATA_DIR}/simkeeper.db-wal" ] && cp -a "${DATA_DIR}/simkeeper.db-wal" "${DATA_DIR}/simkeeper.db-wal.bak-${stamp}"
+  if [ -f "${DATA_DIR}/simkeeper.db" ]; then
+    cp -a "${DATA_DIR}/simkeeper.db" "${DATA_DIR}/simkeeper.db.bak-${stamp}"
+    prune_backups "${DATA_DIR}/simkeeper.db"
+  fi
+  if [ -f "${DATA_DIR}/simkeeper.db-wal" ]; then
+    cp -a "${DATA_DIR}/simkeeper.db-wal" "${DATA_DIR}/simkeeper.db-wal.bak-${stamp}"
+    prune_backups "${DATA_DIR}/simkeeper.db-wal"
+  fi
   cp -a "${INSTALL_DIR}/simkeeper" "${INSTALL_DIR}/simkeeper.bak-${stamp}"
-  prune_backups "${DATA_DIR}/simkeeper.db"
   prune_backups "${INSTALL_DIR}/simkeeper"
 
   log "获取新版本二进制..."

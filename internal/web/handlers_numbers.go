@@ -734,7 +734,10 @@ func (a *App) saveNumberForm(w http.ResponseWriter, r *http.Request, userID int6
 			expiryDate = last.AddDate(0, 0, autoPeriod)
 			expiry = expiryDate.Format(dateLayout)
 			autoStart = last.Format(dateLayout)
-			expiryPast = !expiryDate.After(time.Now())
+			// 按自然日零點比較，與 DaysLeft (< 0 才算已過期) 及前端預覽口徑一致
+			now := time.Now()
+			todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+			expiryPast = expiryDate.Before(todayStart)
 		default:
 			// 到期日直接填写，原样保存；周期起点 = 到期日 - 周期
 			if expiry == "" {

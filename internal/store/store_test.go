@@ -643,3 +643,48 @@ func TestDaysLeftDST(t *testing.T) {
 		t.Errorf("當天到期剩餘天數 = %d, want 0", got)
 	}
 }
+
+// TestNumberCreateUpdateDoesNotMutatePlaintext 驗證 Create 與 Update 寫庫加密時
+// 不會將呼叫方指標中的 LPAString / ConfirmCode 原地覆寫為密文。
+func TestNumberCreateUpdateDoesNotMutatePlaintext(t *testing.T) {
+	h := testDB(t)
+	ur := &UserRepo{DB: h}
+	uid, err := ur.Create("esimuser", "esim@example.com", "hash", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	nr := &NumberRepo{DB: h}
+	const wantLPA = "LPA:1$rsp.example.com$MATCH-001"
+	const wantCode = "123456"
+	n := &PhoneNumber{
+		UserID: uid, PhoneNumber: "+819099998888", CountryCode: "JP", CountryName: "日本",
+		ExpiryDate: "2099-01-01", Status: "active", SimType: "esim",
+		LPAString: wantLPA, ConfirmCode: wantCode, RenewalDaysBefore: 7,
+	}
+	id, err := nr.Create(n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.LPAString != wantLPA || n.ConfirmCode != wantCode {
+		t.Fatalf("Create 不應原地修改明文欄位: lpa=%q confirm=%q", n.LPAString, n.ConfirmCode)
+	}
+	n.ID = id
+	if err := nr.Update(n); err != nil {
+		t.Fatal(err)
+	}
+	if n.LPAString != wantLPA || n.ConfirmCode != wantCode {
+		t.Fatalf("Update 不應原地修改明文欄位: lpa=%q confirm=%q", n.LPAString, n.ConfirmCode)
+	}
+	// 驗證庫內確為密文且 ByID 可正確解密
+	var rawLPA string
+	if err := h.QueryRow(`SELECT lpa_string FROM phone_numbers WHERE id = ?`, id).Scan(&rawLPA); err != nil {
+		t.Fatal(err)
+	}
+	if rawLPA == wantLPA {
+		t.Error("庫內 lpa_string 應已加密，不可存明文")
+	}
+	got, err := nr.ByID(id, uid)
+	if err != nil || got.LPAString != wantLPA || got.ConfirmCode != wantCode {
+		t.Fatalf("ByID 解密失敗: %+v %v", got, err)
+	}
+}

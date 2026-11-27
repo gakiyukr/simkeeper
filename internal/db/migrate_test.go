@@ -233,4 +233,7 @@ func TestMySQLEncryptedColumnsUseText(t *testing.T) {
 			}
 		}
 	}
+	if strings.Contains(schemaMySQL, "expiry_date           DATE") {
+		t.Error("schema_mysql.sql 的 expiry_date 不應為 DATE，須為 VARCHAR(10) 以支援無需保號空字串")
+	}
 }

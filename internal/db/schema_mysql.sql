@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS phone_numbers (
     country_code          VARCHAR(10)  NOT NULL,
     country_name          VARCHAR(50)  NOT NULL,
     carrier               VARCHAR(50)  NULL,
-    expiry_date           DATE         NOT NULL,           -- 到期日 YYYY-MM-DD
+    expiry_date           VARCHAR(10)  NOT NULL DEFAULT '', -- 到期日 YYYY-MM-DD（無需保號為空串）
     recharge_amount       DOUBLE       NULL,
     recharge_currency     VARCHAR(8)   NOT NULL DEFAULT 'USD',
     renewal_days_before   INT          NOT NULL DEFAULT 7, -- 续费提醒提前天数（提醒窗口）

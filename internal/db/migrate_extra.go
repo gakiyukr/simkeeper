@@ -182,7 +182,8 @@ var mysqlEncryptedColumns = []struct {
 	{"notification_configs", "tgcall_api_hash"},
 }
 
-// widenMySQLSecretColumns 針對舊 MySQL 資料庫，將存放密文的 VARCHAR 欄位升級為 TEXT（冪等）。
+// widenMySQLSecretColumns 針對舊 MySQL 資料庫，將存放密文的 VARCHAR 欄位升級為 TEXT，
+// 並將 phone_numbers.expiry_date 由 DATE 轉為 VARCHAR(10) 以支援無需保號空字串（冪等）。
 func (d *DB) widenMySQLSecretColumns() error {
 	if d.Dialect.Name != DialectMySQL {
 		return nil
@@ -202,6 +203,15 @@ func (d *DB) widenMySQLSecretColumns() error {
 			if _, err := d.DB.Exec(q); err != nil {
 				return fmt.Errorf("擴充 MySQL 欄位 %s.%s 為 TEXT 失敗: %w", target.table, target.column, err)
 			}
+		}
+	}
+	var expiryType string
+	if err := d.DB.QueryRow(
+		`SELECT DATA_TYPE FROM information_schema.COLUMNS
+		 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'phone_numbers' AND COLUMN_NAME = 'expiry_date'`,
+	).Scan(&expiryType); err == nil && strings.EqualFold(expiryType, "date") {
+		if _, err := d.DB.Exec(`ALTER TABLE phone_numbers MODIFY COLUMN expiry_date VARCHAR(10) NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("調整 MySQL 欄位 phone_numbers.expiry_date 失敗: %w", err)
 		}
 	}
 	return nil

@@ -164,22 +164,39 @@ func (j *Jobs) sendDueNotifications(numbers []store.PhoneNumber, now time.Time, 
 	return outcomes, sent, failed
 }
 
+// dedupStrings 去除字串切片中的重複項並保留首次出現順序。
+func dedupStrings(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	return out
+}
+
 // alertChannelFailures 同一用户本轮「有渠道失败且仍有渠道成功」时，
 // 通过成功渠道发一条系统告警——防止渠道静默失效数月无人发现。
 // 全部渠道都失败时无法告警（已知限制），由日志与管理端失败统计兜底。
+// 對失敗與成功管道去重，避免同輪有多個號碼到期時對同一管道重複轟炸告警。
 func (j *Jobs) alertChannelFailures(outcomes map[int64]*userOutcome, logf func(string, ...any)) {
 	for uid, oc := range outcomes {
-		if len(oc.failed) == 0 || len(oc.succeeded) == 0 {
+		failedCh := dedupStrings(oc.failed)
+		succeededCh := dedupStrings(oc.succeeded)
+		if len(failedCh) == 0 || len(succeededCh) == 0 {
 			continue
 		}
-		names := make([]string, len(oc.failed))
-		for i, c := range oc.failed {
+		names := make([]string, len(failedCh))
+		for i, c := range failedCh {
 			names[i] = channelLabel(c)
 		}
 		msg := "⚠️ 以下通知渠道在最近一轮提醒中投递失败：\n\n- " +
 			strings.Join(names, "\n- ") +
 			"\n\n请到「通知配置」检查对应渠道（测试发送可即时验证）。\n本告警通过仍正常的渠道发送；详情见通知历史。"
-		if err := j.sender.SendSystemAlert(uid, oc.succeeded, msg); err != nil {
+		if err := j.sender.SendSystemAlert(uid, succeededCh, msg); err != nil {
 			logf("渠道失败告警发送失败(用户ID=%d): %v", uid, err)
 		} else {
 			logf("已向用户ID=%d 发送渠道失败告警（失败渠道: %s）", uid, strings.Join(names, ", "))

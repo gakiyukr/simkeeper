@@ -172,12 +172,21 @@ func simhubCardToNumber(c simhubCard) (store.PhoneNumber, string) {
 	if name == "" {
 		return n, "国家代码未收录"
 	}
+	n.NoKeepalive = !c.IsLongTerm
 	expiry := ""
-	if t, err := time.Parse(time.RFC3339, c.ExpiryDate); err == nil {
-		expiry = t.Local().Format(dateLayout)
+	if rawExp := strings.TrimSpace(c.ExpiryDate); rawExp != "" {
+		if t, err := time.Parse(time.RFC3339, rawExp); err == nil {
+			expiry = t.Local().Format(dateLayout)
+		} else if _, err := time.ParseInLocation(dateLayout, rawExp, time.Local); err == nil {
+			expiry = rawExp
+		}
 	}
-	if expiry == "" {
+	// 需要保號的號碼必須有合法到期日；無需保號號碼允許空到期日（與本程式匯出格式往返無損）。
+	if !n.NoKeepalive && expiry == "" {
 		return n, "到期日缺失或格式无效"
+	}
+	if n.NoKeepalive {
+		expiry = ""
 	}
 	n.PhoneNumber = phone
 	n.CountryCode = cc
@@ -204,9 +213,10 @@ func simhubCardToNumber(c simhubCard) (store.PhoneNumber, string) {
 	}
 	n.PlanName = strings.TrimSpace(c.Plan)
 	n.Notes = strings.TrimSpace(c.TransactionNotes)
-	n.NoKeepalive = !c.IsLongTerm
-	n.AutoExpiryEnabled = c.RenewDays > 0
-	n.AutoExpiryPeriod = c.RenewDays
+	if !n.NoKeepalive {
+		n.AutoExpiryEnabled = c.RenewDays > 0
+		n.AutoExpiryPeriod = c.RenewDays
+	}
 	if s := strings.TrimSpace(c.SecondaryPhoneNumber); s != "" {
 		n.SecondaryNumbers = s
 	}
@@ -292,13 +302,18 @@ func (a *App) importNumbersFromCSV(userID int64, raw []byte) (created, updated, 
 			continue
 		}
 		expiry := at("到期日")
-		if _, perr := time.ParseInLocation(dateLayout, expiry, time.Local); perr != nil {
+		noKeepalive := false
+		if expiry == "" {
+			// 本程式匯出的 CSV 中，「無需保號」號碼到期日為空，回導時放行並標記為無需保號。
+			noKeepalive = true
+		} else if _, perr := time.ParseInLocation(dateLayout, expiry, time.Local); perr != nil {
 			skipped++
 			continue
 		}
 		n := store.PhoneNumber{
 			PhoneNumber: phone, CountryCode: cc, CountryName: name,
 			Carrier: at("运营商"), ExpiryDate: expiry,
+			NoKeepalive:       noKeepalive,
 			Status:            at("状态"),
 			RenewalDaysBefore: 7, SimType: "physical",
 		}
@@ -316,7 +331,9 @@ func (a *App) importNumbersFromCSV(userID int64, raw []byte) (created, updated, 
 			continue
 		}
 		n.ID, n.UserID, n.DeviceID = existing.ID, existing.UserID, existing.DeviceID
-		n.NoKeepalive = existing.NoKeepalive
+		if !noKeepalive {
+			n.NoKeepalive = existing.NoKeepalive
+		}
 		n.SimType, n.LPAString, n.ConfirmCode = existing.SimType, existing.LPAString, existing.ConfirmCode
 		n.PlanName, n.Notes, n.SecondaryNumbers = existing.PlanName, existing.Notes, existing.SecondaryNumbers
 		n.RenewalDaysBefore = existing.RenewalDaysBefore

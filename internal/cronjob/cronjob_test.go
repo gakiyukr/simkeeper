@@ -31,3 +31,17 @@ func TestReminderDue(t *testing.T) {
 		})
 	}
 }
+
+// TestDedupStrings 驗證渠道告警去重保持原順序，不重複發送系統告警。
+func TestDedupStrings(t *testing.T) {
+	got := dedupStrings([]string{"email", "telegram", "email", "feishu", "telegram"})
+	want := []string{"email", "telegram", "feishu"}
+	if len(got) != len(want) {
+		t.Fatalf("dedupStrings 長度 = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("dedupStrings[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}

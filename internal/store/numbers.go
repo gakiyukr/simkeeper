@@ -134,13 +134,14 @@ func (r *NumberRepo) ByID(id, userID int64) (*PhoneNumber, error) {
 	return scanNumber(r.DB.QueryRow(q, args...))
 }
 
-// Create 新增号码。eSIM 激活信息先加密再落库。
+// Create 新增号码。對複本做加密再落庫，不修改呼叫方結構體的明文欄位。
 func (r *NumberRepo) Create(n *PhoneNumber) (int64, error) {
-	if n.SimType != "esim" {
-		n.SimType = "physical"
+	stored := *n
+	if stored.SimType != "esim" {
+		stored.SimType = "physical"
 	}
-	n.normalizeReminderInterval()
-	if err := encryptESIMSecrets(n); err != nil {
+	stored.normalizeReminderInterval()
+	if err := encryptESIMSecrets(&stored); err != nil {
 		return 0, err
 	}
 	return r.DB.InsertID(
@@ -151,12 +152,12 @@ func (r *NumberRepo) Create(n *PhoneNumber) (int64, error) {
 		  no_keepalive, plan_name, secondary_numbers, sim_type, lpa_string, confirm_code,
 		  device_id, status, notes)
 		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		n.UserID, n.PhoneNumber, n.CountryCode, n.CountryName, nullStr(n.Carrier), n.ExpiryDate,
-		n.RenewalDaysBefore, n.ReminderIntervalDays,
-		boolInt(n.AutoExpiryEnabled), nullStr(n.AutoStartDate), nullInt(n.AutoExpiryPeriod),
-		nullStr(n.AutoCalculatedExpiry), boolInt(n.NoKeepalive),
-		nullStr(n.PlanName), nullStr(n.SecondaryNumbers), n.SimType, nullStr(n.LPAString), nullStr(n.ConfirmCode),
-		nullInt64(n.DeviceID), n.Status, nullStr(n.Notes),
+		stored.UserID, stored.PhoneNumber, stored.CountryCode, stored.CountryName, nullStr(stored.Carrier), stored.ExpiryDate,
+		stored.RenewalDaysBefore, stored.ReminderIntervalDays,
+		boolInt(stored.AutoExpiryEnabled), nullStr(stored.AutoStartDate), nullInt(stored.AutoExpiryPeriod),
+		nullStr(stored.AutoCalculatedExpiry), boolInt(stored.NoKeepalive),
+		nullStr(stored.PlanName), nullStr(stored.SecondaryNumbers), stored.SimType, nullStr(stored.LPAString), nullStr(stored.ConfirmCode),
+		nullInt64(stored.DeviceID), stored.Status, nullStr(stored.Notes),
 	)
 }
 
@@ -169,13 +170,14 @@ func (n *PhoneNumber) normalizeReminderInterval() {
 }
 
 // Update 全量更新号码字段（归属校验由调用方保证，语句仍带 user_id 条件兜底）。
-// eSIM 激活信息先加密再落库。
+// 對複本做加密再落庫，不修改呼叫方結構體的明文欄位。
 func (r *NumberRepo) Update(n *PhoneNumber) error {
-	if n.SimType != "esim" {
-		n.SimType = "physical"
+	stored := *n
+	if stored.SimType != "esim" {
+		stored.SimType = "physical"
 	}
-	n.normalizeReminderInterval()
-	if err := encryptESIMSecrets(n); err != nil {
+	stored.normalizeReminderInterval()
+	if err := encryptESIMSecrets(&stored); err != nil {
 		return err
 	}
 	_, err := r.DB.Exec(
@@ -186,13 +188,13 @@ func (r *NumberRepo) Update(n *PhoneNumber) error {
 		 no_keepalive=?, plan_name=?, secondary_numbers=?, sim_type=?, lpa_string=?, confirm_code=?,
 		 device_id=?, status=?, notes=?, updated_at=?
 		 WHERE id=? AND user_id=?`,
-		n.PhoneNumber, n.CountryCode, n.CountryName, nullStr(n.Carrier), n.ExpiryDate,
-		n.RenewalDaysBefore, n.ReminderIntervalDays,
-		boolInt(n.AutoExpiryEnabled), nullStr(n.AutoStartDate), nullInt(n.AutoExpiryPeriod),
-		nullStr(n.AutoCalculatedExpiry), boolInt(n.NoKeepalive),
-		nullStr(n.PlanName), nullStr(n.SecondaryNumbers), n.SimType, nullStr(n.LPAString), nullStr(n.ConfirmCode),
-		nullInt64(n.DeviceID), n.Status, nullStr(n.Notes),
-		db.Touch(time.Now()), n.ID, n.UserID,
+		stored.PhoneNumber, stored.CountryCode, stored.CountryName, nullStr(stored.Carrier), stored.ExpiryDate,
+		stored.RenewalDaysBefore, stored.ReminderIntervalDays,
+		boolInt(stored.AutoExpiryEnabled), nullStr(stored.AutoStartDate), nullInt(stored.AutoExpiryPeriod),
+		nullStr(stored.AutoCalculatedExpiry), boolInt(stored.NoKeepalive),
+		nullStr(stored.PlanName), nullStr(stored.SecondaryNumbers), stored.SimType, nullStr(stored.LPAString), nullStr(stored.ConfirmCode),
+		nullInt64(stored.DeviceID), stored.Status, nullStr(stored.Notes),
+		db.Touch(time.Now()), stored.ID, stored.UserID,
 	)
 	return err
 }

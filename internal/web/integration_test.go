@@ -727,3 +727,90 @@ func TestHTTPTOTPRateLimitNotResetByPassword(t *testing.T) {
 		t.Fatalf("累計滿 5 次後應觸發限流（不可被重複密碼提交重置）, got %d %q", rBlocked.StatusCode, bodyBlocked)
 	}
 }
+
+// TestHTTPNoKeepaliveBackupRoundTrip 回歸：本系統匯出的 JSON 與 CSV 備份中，
+// 「無需保號」號碼到期日為空，清庫後無論以 JSON 或 CSV 還原均須成功匯入而非被跳過。
+func TestHTTPNoKeepaliveBackupRoundTrip(t *testing.T) {
+	a := integrationApp(t)
+	mustAdmin(t, a)
+	srv, c := newTestServer(t, a)
+	loginAdmin(t, c, srv.URL)
+
+	tok := getCSRF(t, c, srv.URL, "/numbers/new")
+	code, body := postForm(t, c, srv.URL, "/numbers/new", url.Values{
+		"country_code": {"JP"}, "phone_national": {"9055556666"}, "carrier": {"KDDI"},
+		"keepalive_mode": {"none"}, "renewal_days_before": {"7"}, "csrf_token": {tok},
+	})
+	if code != 303 {
+		t.Fatalf("建立無需保號號碼應 303, got %d %s", code, body)
+	}
+
+	getExport := func(format string) []byte {
+		resp, err := c.Get(srv.URL + "/admin/export?format=" + format)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return b
+	}
+	jsonRaw := getExport("json")
+	csvRaw := getExport("csv")
+
+	for _, tc := range []struct {
+		name, filename string
+		data           []byte
+	}{
+		{"JSON", "backup.json", jsonRaw},
+		{"CSV", "backup.csv", csvRaw},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := a.DB.Exec(`DELETE FROM phone_numbers`); err != nil {
+				t.Fatal(err)
+			}
+			tok := getCSRF(t, c, srv.URL, "/admin")
+			code, body := postMultipart(t, c, srv.URL, "/admin/import", tc.filename, tc.data,
+				url.Values{"csrf_token": {tok}})
+			if code != 303 {
+				t.Fatalf("%s 匯入應 303, got %d %s", tc.name, code, body)
+			}
+			n, err := a.Numbers.ByPhone(1, "+819055556666")
+			if err != nil {
+				t.Fatalf("%s 還原後無需保號號碼不應被跳過: %v", tc.name, err)
+			}
+			if !n.NoKeepalive || n.ExpiryDate != "" {
+				t.Errorf("%s 還原屬性不符: NoKeepalive=%v ExpiryDate=%q", tc.name, n.NoKeepalive, n.ExpiryDate)
+			}
+		})
+	}
+}
+
+// TestHTTPLastKeepaliveExpiresTodayNotPast 回歸：依「我剛保過號」推算出的到期日剛好為今天時，
+// DaysLeft == 0（未過期），儲存提示不應誤判為「已過期」。
+func TestHTTPLastKeepaliveExpiresTodayNotPast(t *testing.T) {
+	a := integrationApp(t)
+	mustAdmin(t, a)
+	srv, c := newTestServer(t, a)
+	loginAdmin(t, c, srv.URL)
+
+	last := time.Now().AddDate(0, 0, -30).Format("2006-01-02")
+	tok := getCSRF(t, c, srv.URL, "/numbers/new")
+	code, body := postForm(t, c, srv.URL, "/numbers/new", url.Values{
+		"country_code": {"JP"}, "phone_national": {"9077778888"}, "carrier": {"KDDI"},
+		"keepalive_mode": {"keep"}, "date_mode": {"last"},
+		"last_keepalive_date": {last}, "auto_expiry_period": {"30"},
+		"renewal_days_before": {"7"}, "csrf_token": {tok},
+	})
+	if code != 303 {
+		t.Fatalf("建號應 303, got %d %s", code, body)
+	}
+	resp, err := c.Get(srv.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if strings.Contains(string(html), "该号码已过期") {
+		t.Error("推算到期日為今天時不應誤報已過期")
+	}
+}
