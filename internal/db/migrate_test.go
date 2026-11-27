@@ -2,6 +2,7 @@ package db
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -207,5 +208,29 @@ func TestSQLitePeriodCheckRebuildRollsBackOnFailure(t *testing.T) {
 	}
 	if leftovers != 0 {
 		t.Fatalf("回滚后不应留下 phone_numbers_new 残表, got %d", leftovers)
+	}
+}
+
+// TestMySQLEncryptedColumnsUseText 確保 MySQL schema 與補列規格中，所有存放
+// AES-256-GCM 密文的欄位均為 TEXT，避免 TOTP 密鑰（87 字元）或長 Webhook 觸發截斷錯誤。
+func TestMySQLEncryptedColumnsUseText(t *testing.T) {
+	for _, col := range mysqlEncryptedColumns {
+		if strings.Contains(schemaMySQL, col.column+" VARCHAR(") ||
+			strings.Contains(schemaMySQL, col.column+"   VARCHAR(") {
+			t.Errorf("schema_mysql.sql 的加密欄位 %s.%s 不應使用 VARCHAR，請改為 TEXT", col.table, col.column)
+		}
+	}
+	for _, spec := range userColumns {
+		if spec.Name == "totp_secret" && !strings.EqualFold(spec.MySQLType, "TEXT") {
+			t.Errorf("userColumns.totp_secret MySQLType = %q, want TEXT", spec.MySQLType)
+		}
+	}
+	for _, spec := range notificationConfigColumns {
+		switch spec.Name {
+		case "feishu_webhook", "feishu_secret", "dingtalk_webhook", "dingtalk_secret", "tgcall_api_hash":
+			if !strings.EqualFold(spec.MySQLType, "TEXT") {
+				t.Errorf("notificationConfigColumns.%s MySQLType = %q, want TEXT", spec.Name, spec.MySQLType)
+			}
+		}
 	}
 }

@@ -134,7 +134,7 @@ cloudflared tunnel run --url http://127.0.0.1:8080 simkeeper   # 建议注册成
 ## 6. 数据库选择
 
 - 默认 SQLite（零配置）。备份 = 备份 `/var/lib/simkeeper/simkeeper.db` 一个文件（WAL 模式下用 `sqlite3 simkeeper.db ".backup '/backup/simkeeper.db'"` 更安全）。
-- **凭据加密密钥** `/var/lib/simkeeper/data/secret.key` 与数据库分开放置：只备份 DB（不含密钥）时，渠道凭据在备份里不可读——这是默认推荐的备份策略；若希望备份可直接恢复全部数据，把 `secret.key` 单独加密存放。
+- **凭据加密密钥** `/var/lib/simkeeper/secret.key`（SQLite 預設與 `-db` 同目錄，其餘驅動預設 `data/secret.key`，亦可用 `-secret-key-file` 或 `SK_SECRET_KEY` 指定）与数据库分开放置：只备份 DB（不含密钥）时，渠道凭据在备份里不可读——这是默认推荐的备份策略；若希望备份可直接恢复全部数据，把 `secret.key` 单独加密存放。
 - 要用 MySQL/PostgreSQL：先建库建用户，然后在 unit 的 `ExecStart` 加 `-driver mysql -dsn '...'`（格式见 README）。**数据库不要对公网开放**；如果数据库在本机之外，用内网/专线/VPN，不要裸公网。
 
 ## 7. 通知渠道配置
@@ -163,8 +163,8 @@ sudo -u simkeeper /opt/simkeeper/simkeeper reset-password -db /var/lib/simkeeper
 
 - [ ] HTTPS 已启用（-secure-cookies 与 -trust-proxy 已随 unit 开启）
 - [ ] 时区已确认（启动日志）
-- [ ] SQLite 用户：数据库文件在 `/var/lib/simkeeper`，权限 750（对 simkeeper 组外不可读——里面是明文凭据和手机号）
+- [ ] SQLite 用户：数据库与密钥文件位于 `/var/lib/simkeeper`，目录权限 750、密钥权限 600（对 simkeeper 组外不可读——数据库内含手机号与加密后的渠道凭据／eSIM 激活码，与同目录的 `secret.key` 同时泄露等同明文）
 - [ ] MySQL/PG 用户：数据库端口不对公网
-- [ ] 备份已设置（含数据库的备份要加密存放——渠道凭据是明文的）
+- [ ] 备份已设置（数据库备份与 `secret.key` 分开隔离存放，或整体加密存放）
 - [ ] `cron-interval` 保持默认 1h；不要完全禁用进程内调度（提醒会停）
 - [ ] 定期升级（`systemctl restart` 即可，迁移自动）

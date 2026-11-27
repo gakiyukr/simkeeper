@@ -60,6 +60,9 @@ func buildMIME(fromName, from, to, subject, htmlBody, altText string) string {
 	return b.String()
 }
 
+// smtpTimeout SMTP 建連與整次發信的總超時時間，避免遠端無回應時長期阻塞請求或定時任務鎖。
+var smtpTimeout = 20 * time.Second
+
 // SendEmail 通过用户自配的 SMTP 服务器发信。
 // 与 PHP/PHPMailer 版语义一致：tls=STARTTLS（默认 587）、ssl=隐式 TLS（465）、none=不加密。
 // 返回错误时信息含 SMTP 服务器响应，便于用户在页面上诊断。
@@ -73,24 +76,41 @@ func SendEmail(cfg EmailConfig, to, subject, htmlBody, altText string) error {
 	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
 	raw := buildMIME(cfg.FromName, cfg.From, to, subject, htmlBody, altText)
 
+	dialer := &net.Dialer{Timeout: smtpTimeout}
+	deadline := time.Now().Add(smtpTimeout)
 	var client *smtp.Client
 	var err error
 	switch cfg.Secure {
 	case "ssl":
-		conn, dialErr := tls.Dial("tcp", addr, &tls.Config{ServerName: cfg.Host})
+		conn, dialErr := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{ServerName: cfg.Host})
 		if dialErr != nil {
 			return fmt.Errorf("SMTP 连接失败(%s): %w", addr, dialErr)
 		}
+		_ = conn.SetDeadline(deadline)
 		client, err = smtp.NewClient(conn, cfg.Host)
+		if err != nil {
+			_ = conn.Close()
+		}
 	case "none":
-		conn, dialErr := net.Dial("tcp", addr)
+		conn, dialErr := dialer.Dial("tcp", addr)
 		if dialErr != nil {
 			return fmt.Errorf("SMTP 连接失败(%s): %w", addr, dialErr)
 		}
+		_ = conn.SetDeadline(deadline)
 		client, err = smtp.NewClient(conn, cfg.Host)
+		if err != nil {
+			_ = conn.Close()
+		}
 	default: // tls: 先明文连接再 STARTTLS；不支持时必须报错，不能静默降级
-		client, err = smtp.Dial(addr)
-		if err == nil {
+		conn, dialErr := dialer.Dial("tcp", addr)
+		if dialErr != nil {
+			return fmt.Errorf("SMTP 连接失败(%s): %w", addr, dialErr)
+		}
+		_ = conn.SetDeadline(deadline)
+		client, err = smtp.NewClient(conn, cfg.Host)
+		if err != nil {
+			_ = conn.Close()
+		} else {
 			if ok, _ := client.Extension("STARTTLS"); ok {
 				err = client.StartTLS(&tls.Config{ServerName: cfg.Host})
 			} else {

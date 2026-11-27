@@ -102,6 +102,11 @@ func (a *App) currentSession(r *http.Request) *auth.Session {
 	return s
 }
 
+// isSecure 判斷請求或部署設定是否要求 Cookie 加上 Secure 標記。
+func (a *App) isSecure(r *http.Request) bool {
+	return (r != nil && r.TLS != nil) || a.SecureCookies
+}
+
 // sessionCookie 会话 Cookie 的统一属性。
 // Secure 在两种情况下开启：程序直连 TLS（r.TLS 非空），
 // 或部署侧显式开启 SecureCookies（TLS 由反向代理终结的场景）。
@@ -112,7 +117,7 @@ func (a *App) sessionCookie(r *http.Request, token string, maxAge int) *http.Coo
 		Path:     "/",
 		MaxAge:   maxAge,
 		HttpOnly: true,
-		Secure:   r.TLS != nil || a.SecureCookies,
+		Secure:   a.isSecure(r),
 		SameSite: http.SameSiteLaxMode,
 	}
 }
@@ -205,8 +210,20 @@ func (a *App) secureHeaders(next http.Handler) http.Handler {
 	})
 }
 
-// render 渲染指定页面模板。
+// render 渲染指定页面模板；若本次頁面消費了 Flash Cookie，在寫入回應頭前將其清除。
 func (a *App) render(w http.ResponseWriter, status int, name string, data any) {
+	shouldClear := false
+	switch d := data.(type) {
+	case pageData:
+		shouldClear = d.clearFlashCookie
+	case *pageData:
+		if d != nil {
+			shouldClear = d.clearFlashCookie
+		}
+	}
+	if shouldClear {
+		a.clearFlash(w)
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	if err := a.Tmpl.ExecuteTemplate(w, name, data); err != nil {
@@ -216,15 +233,16 @@ func (a *App) render(w http.ResponseWriter, status int, name string, data any) {
 
 // pageData 每页公共字段。
 type pageData struct {
-	SiteName   string
-	Title      string
-	User       *store.User
-	CSRFToken  string
-	Flash      string
-	FlashIsErr bool
-	ActiveNav  string
-	Content    any
-	Year       int
+	SiteName         string
+	Title            string
+	User             *store.User
+	CSRFToken        string
+	Flash            string
+	FlashIsErr       bool
+	ActiveNav        string
+	Content          any
+	Year             int
+	clearFlashCookie bool
 }
 
 // baseData 填充公共字段；user 可为 nil（登录页）。
@@ -244,20 +262,37 @@ func (a *App) baseData(r *http.Request, title string) pageData {
 		d.CSRFToken = sess.CSRFToken
 	}
 	d.Flash, d.FlashIsErr = a.takeFlash(r)
+	if d.Flash != "" {
+		d.clearFlashCookie = true
+	}
 	return d
 }
 
-// setFlash / takeFlash 用短时效 Cookie 传递一次性提示（PRG 模式）。
+// setFlash / clearFlash / takeFlash 用短时效 Cookie 传递一次性提示（PRG 模式）。
 // 值必须 URL 编码：Go 的 SetCookie 会静默丢弃包含非 ASCII 字节（如中文）的 Cookie。
+// 寫入新提示時同步清除另一種提示 Cookie，避免舊錯誤覆蓋新成功提示；頁面渲染消費後立即刪除。
 func (a *App) setFlash(w http.ResponseWriter, msg string, isErr bool) {
-	name := "SKFLASH"
+	name, other := "SKFLASH", "SKFLASHERR"
 	if isErr {
-		name = "SKFLASHERR"
+		name, other = "SKFLASHERR", "SKFLASH"
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name: name, Value: url.QueryEscape(msg), Path: "/",
-		MaxAge: 30, HttpOnly: true, SameSite: http.SameSiteLaxMode,
+		Name: other, Value: "", Path: "/",
+		MaxAge: -1, HttpOnly: true, Secure: a.SecureCookies, SameSite: http.SameSiteLaxMode,
 	})
+	http.SetCookie(w, &http.Cookie{
+		Name: name, Value: url.QueryEscape(msg), Path: "/",
+		MaxAge: 30, HttpOnly: true, Secure: a.SecureCookies, SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func (a *App) clearFlash(w http.ResponseWriter) {
+	for _, name := range []string{"SKFLASH", "SKFLASHERR"} {
+		http.SetCookie(w, &http.Cookie{
+			Name: name, Value: "", Path: "/",
+			MaxAge: -1, HttpOnly: true, Secure: a.SecureCookies, SameSite: http.SameSiteLaxMode,
+		})
+	}
 }
 
 func (a *App) takeFlash(r *http.Request) (string, bool) {

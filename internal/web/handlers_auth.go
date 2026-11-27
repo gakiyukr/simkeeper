@@ -81,11 +81,11 @@ func (a *App) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		a.render(w, http.StatusOK, "page_login", d)
 		return
 	}
-	_ = a.Attempts.Clear(ip)
-
-	// 两步验证：密码通过后进入第二步，凭验证器验证码完成登录
+	// 两步验证：密码通过后进入第二步，凭验证器验证码完成登录。
+	// 注意：不可在此提前清空 IP 限流計數，否則開啟 TOTP 時攻擊者可透過重複提交正確密碼
+	// 反覆重置計數、繞過第二因子防暴力破解；改於 loginAs 正式登入成功後清空。
 	if totpSecret, totpEnabled, err := a.Users.TOTPForUser(user.ID); err == nil && totpEnabled && totpSecret != "" {
-		a.startTOTPPending(w, user.ID, &d)
+		a.startTOTPPending(w, r, user.ID, &d)
 		return
 	}
 	a.loginAs(w, r, user)
@@ -94,7 +94,7 @@ func (a *App) HandleLogin(w http.ResponseWriter, r *http.Request) {
 // startTOTPPending 密码已通过、等待两步验证：签发 2 分钟的待验证 Cookie
 // （服务端密钥 HMAC 签名，不可伪造），渲染验证码输入页。
 // 此时仍未建立登录会话——验证码通过才发正式会话。
-func (a *App) startTOTPPending(w http.ResponseWriter, userID int64, d *pageData) {
+func (a *App) startTOTPPending(w http.ResponseWriter, r *http.Request, userID int64, d *pageData) {
 	payload := fmt.Sprintf("%d|%d", userID, time.Now().Add(2*time.Minute).Unix())
 	http.SetCookie(w, &http.Cookie{
 		Name:     "SKTOTP",
@@ -102,6 +102,7 @@ func (a *App) startTOTPPending(w http.ResponseWriter, userID int64, d *pageData)
 		Path:     "/login",
 		MaxAge:   120,
 		HttpOnly: true,
+		Secure:   a.isSecure(r),
 		SameSite: http.SameSiteLaxMode,
 	})
 	a.render(w, http.StatusOK, "page_totp", *d)
@@ -160,14 +161,19 @@ func (a *App) HandleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// 待验证 Cookie 用完即弃
-	http.SetCookie(w, &http.Cookie{Name: "SKTOTP", Value: "", Path: "/login", MaxAge: -1, HttpOnly: true})
+	http.SetCookie(w, &http.Cookie{
+		Name: "SKTOTP", Value: "", Path: "/login", MaxAge: -1,
+		HttpOnly: true, Secure: a.isSecure(r), SameSite: http.SameSiteLaxMode,
+	})
 	a.loginAs(w, r, user)
 }
 
 // loginAs 建立 Cookie 会话。
 // 先销毁旧会话（匿名预会话或已被 CSRF 保护的登录前会话），
-// 再发新令牌——服务端版 session rotation，防会话固定。
+// 再发新令牌——服务端版 session rotation，防会话固定；
+// 並於完成全部認證因子後清空該 IP 的登入失敗限流紀錄。
 func (a *App) loginAs(w http.ResponseWriter, r *http.Request, u *store.User) {
+	_ = a.Attempts.Clear(a.ClientIP(r))
 	if old := a.currentSession(r); old != nil {
 		_ = a.Sessions.Destroy(old.Token)
 	}

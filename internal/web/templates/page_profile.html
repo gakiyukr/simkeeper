@@ -47,7 +47,7 @@
     </form>
     {{end}}
     <p class="hint" style="margin:1.25rem 0 0">
-      验证器丢失时，需要服务器管理员在数据库中清除 totp 字段才能恢复登录，请妥善保管验证器。
+      验证器丢失时，可在服务器运行 <code>simkeeper reset-password -clear-totp</code> 解绑并重置密码后重新绑定，请妥善保管验证器。
     </p>
   </div>
 </div>

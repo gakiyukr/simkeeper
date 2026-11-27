@@ -316,6 +316,7 @@ func (a *App) importNumbersFromCSV(userID int64, raw []byte) (created, updated, 
 			continue
 		}
 		n.ID, n.UserID, n.DeviceID = existing.ID, existing.UserID, existing.DeviceID
+		n.NoKeepalive = existing.NoKeepalive
 		n.SimType, n.LPAString, n.ConfirmCode = existing.SimType, existing.LPAString, existing.ConfirmCode
 		n.PlanName, n.Notes, n.SecondaryNumbers = existing.PlanName, existing.Notes, existing.SecondaryNumbers
 		n.RenewalDaysBefore = existing.RenewalDaysBefore

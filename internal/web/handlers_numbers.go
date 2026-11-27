@@ -339,15 +339,16 @@ func (a *App) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 	counts := categoryCounts(all, today)
 	expiring7, activeCnt := 0, 0
 	for i := range all {
+		if all[i].Status != "active" {
+			continue
+		}
+		activeCnt++
 		if all[i].NoKeepalive {
 			continue
 		}
 		days := all[i].DaysLeft(today)
 		if days >= 0 && days <= 7 {
 			expiring7++
-		}
-		if all[i].Status == "active" {
-			activeCnt++
 		}
 	}
 	filtered := filterSortNumbers(all, q, cat, sortKey)
@@ -377,16 +378,16 @@ type CategoryCounts struct {
 	Expired int // 已过期
 }
 
-// categoryCounts 按优先级归类：无需保号 > 已终止 > 已过期 > 周期保号。
-// 终止是用户显式标记的记录，即使其到期日已过也归入终止，避免找不到。
+// categoryCounts 按優先級歸類：已終止 > 無需保號 > 已過期 > 周期保號。
+// 終止是用戶顯式標記的記錄，即使原本為無需保號或已過期也歸入終止，避免在所有分類消失。
 func categoryCounts(nums []store.PhoneNumber, now time.Time) CategoryCounts {
 	var c CategoryCounts
 	for i := range nums {
 		switch {
-		case nums[i].NoKeepalive:
-			c.None++
 		case nums[i].Status == "inactive":
 			c.Lost++
+		case nums[i].NoKeepalive:
+			c.None++
 		case nums[i].DaysLeft(now) < 0:
 			c.Expired++
 		default:
@@ -422,8 +423,8 @@ func filterSortNumbers(all []store.PhoneNumber, q, cat, sortKey string) []store.
 			if !n.NoKeepalive {
 				continue
 			}
-		case "inactive": // 已终止（优先于已过期）
-			if n.NoKeepalive || n.Status != "inactive" {
+		case "inactive": // 已終止（最高優先級，包含已終止的無需保號號碼）
+			if n.Status != "inactive" {
 				continue
 			}
 		case "expired":

@@ -55,8 +55,49 @@ func TestAccountToSession(t *testing.T) {
 		t.Error("AuthKey 与源密钥不一致")
 	}
 	wantID := sha1.Sum(authKey[:])
-	if string(wrapper.Data.AuthKeyID) != string(wantID[:12]) {
-		t.Error("AuthKeyID 应为 SHA1(auth_key) 前 12 字节")
+	wantAuthKeyID := authKey.ID()
+	if len(wrapper.Data.AuthKeyID) != 8 {
+		t.Fatalf("AuthKeyID 長度應為 8 位元組, got %d", len(wrapper.Data.AuthKeyID))
+	}
+	if string(wrapper.Data.AuthKeyID) != string(wantID[12:]) || string(wrapper.Data.AuthKeyID) != string(wantAuthKeyID[:]) {
+		t.Error("AuthKeyID 應為 SHA1(auth_key) 最後 8 位元組（與 crypto.Key.ID 一致）")
+	}
+	if wrapper.Data.Addr == "" {
+		t.Error("應透過 session.TDesktopSession 補齊主 DC 位址")
+	}
+}
+
+func TestAccountToSessionFallbackKey(t *testing.T) {
+	var authKey crypto.Key
+	for i := range authKey {
+		authKey[i] = byte(255 - i)
+	}
+	acc := tdesktop.Account{
+		IDx: 1,
+		Authorization: tdesktop.MTPAuthorization{
+			UserID: 7,
+			MainDC: 5, // 故意缺少 MainDC 密鑰，驗證退回可用密鑰路徑
+			Keys:   map[int]crypto.Key{2: authKey},
+		},
+	}
+	b64, err := accountToSession(acc)
+	if err != nil {
+		t.Fatalf("accountToSession 回退路徑失敗: %v", err)
+	}
+	raw, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		t.Fatalf("base64: %v", err)
+	}
+	var wrapper struct {
+		Version int
+		Data    session.Data
+	}
+	if err := json.Unmarshal(raw, &wrapper); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	wantID := authKey.ID()
+	if wrapper.Data.DC != 2 || string(wrapper.Data.AuthKeyID) != string(wantID[:]) {
+		t.Errorf("回退會話不符預期: dc=%d keyID=%x want=%x", wrapper.Data.DC, wrapper.Data.AuthKeyID, wantID)
 	}
 }
 

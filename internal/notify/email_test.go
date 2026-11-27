@@ -108,3 +108,45 @@ func TestLoginAuthRefusesPlaintextRemote(t *testing.T) {
 		t.Errorf("localhost 中继应允许明文 AUTH LOGIN: %v", err)
 	}
 }
+
+// TestSendEmailTimeout 驗證 SMTP 伺服器無回應時，SendEmail 會依逾時設定迅速報錯，
+// 不會無限期卡住呼叫端或定時任務互斥鎖。
+func TestSendEmailTimeout(t *testing.T) {
+	old := smtpTimeout
+	smtpTimeout = 150 * time.Millisecond
+	t.Cleanup(func() { smtpTimeout = old })
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	port := ln.Addr().(*net.TCPAddr).Port
+
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		<-stop
+	}()
+
+	start := time.Now()
+	err = SendEmail(EmailConfig{
+		Host:   "127.0.0.1",
+		Port:   port,
+		Secure: "tls",
+		From:   "from@example.com",
+	}, "to@example.com", "subject", "<b>html</b>", "text")
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("SMTP 無回應時應逾時報錯")
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("逾時耗時過長: %v", elapsed)
+	}
+}

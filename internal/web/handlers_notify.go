@@ -47,10 +47,14 @@ type notifyConfigPublic struct {
 	HasTGCallSession   bool
 }
 
-// toPublic 从存储配置构造展示子集。
+// toPublic 从存储配置构造展示子集；新帳號尚無配置時回傳帶預設埠與加密方式的空物件，
+// 讓頁面模板的 placeholder 與 TG 電話「未登录」狀態正常顯示。
 func toPublic(c *store.NotifyConfig) *notifyConfigPublic {
 	if c == nil {
-		return nil
+		return &notifyConfigPublic{
+			EmailSMTPPort:   587,
+			EmailSMTPSecure: "tls",
+		}
 	}
 	return &notifyConfigPublic{
 		EmailEnabled: c.EmailEnabled, EmailSMTPHost: c.EmailSMTPHost, EmailSMTPPort: c.EmailSMTPPort,

@@ -259,7 +259,7 @@ const SK_PHONE_GROUPS = {{phoneGroupsJSON}};
     const c = SK_COUNTRIES.find(function (x) { return x.Code === code.value; });
     if (!c) return;
     const dial = String(c.Dial);
-    const digits = phone.value.replace(/\D/g, '');
+    let digits = phone.value.replace(/\D/g, '');
     if (!digits) return;
     if (dial && digits.indexOf(dial) === 0) digits = digits.slice(dial.length);
     if (!digits) { phone.value = ''; return; }
@@ -403,6 +403,7 @@ const SK_PHONE_GROUPS = {{phoneGroupsJSON}};
     fieldExpiry.hidden = !keep || m !== 'expiry';
     last.required = keep && m === 'last';
     expiry.required = keep && m === 'expiry';
+    period.required = keep;
     // 重复提醒间隔不能大于提醒提前天数（服务端同样校验）
     interval.max = String(remindDays());
     markChips();

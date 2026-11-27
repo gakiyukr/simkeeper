@@ -391,6 +391,12 @@ func TestNumberFormTemplateRenders(t *testing.T) {
 	if !strings.Contains(newHTML, `name="reminder_interval_days"`) || !strings.Contains(newHTML, `value="1"`) {
 		t.Error("新增表单的重复提醒间隔应默认 1 天")
 	}
+	if !strings.Contains(newHTML, `let digits = phone.value.replace`) {
+		t.Error("號碼失焦正規化應以 let 宣告 digits，避免貼上整號時觸發 TypeError")
+	}
+	if !strings.Contains(newHTML, `period.required = keep;`) {
+		t.Error("切換為無需保號時應同步關閉 auto_expiry_period 的 required 屬性")
+	}
 }
 
 // TestFormatPhoneGroups 号码阅读分组：常见国家规则、裸号（副卡）不重复剥区号、
@@ -653,5 +659,49 @@ func TestDevicesTemplateRenders(t *testing.T) {
 	empty := render(DevicesPage{})
 	if !strings.Contains(empty, "还没有设备") || !strings.Contains(empty, "添加设备") {
 		t.Error("空态应提示添加设备")
+	}
+}
+
+// TestInactiveNoKeepaliveNotLost 回歸：將「無需保號」號碼標記為「已終止」時，
+// 應歸入已終止分類並正確計數，不可在所有分類中消失。
+func TestInactiveNoKeepaliveNotLost(t *testing.T) {
+	now := time.Now()
+	nums := []store.PhoneNumber{
+		{ID: 1, PhoneNumber: "+819011111111", CountryCode: "JP", Status: "active", NoKeepalive: true},
+		{ID: 2, PhoneNumber: "+819022222222", CountryCode: "JP", Status: "inactive", NoKeepalive: true},
+	}
+	counts := categoryCounts(nums, now)
+	if counts.None != 1 || counts.Lost != 1 || counts.Active != 1 {
+		t.Fatalf("分類計數錯誤: %+v (want None=1, Lost=1, Active=1)", counts)
+	}
+	if got := filterSortNumbers(nums, "", "inactive", ""); len(got) != 1 || got[0].ID != 2 {
+		t.Fatalf("已終止分類應包含已終止的無需保號號碼 ID=2, got %+v", got)
+	}
+	if got := filterSortNumbers(nums, "", "none", ""); len(got) != 1 || got[0].ID != 1 {
+		t.Fatalf("無需保號分類不應包含已終止號碼, got %+v", got)
+	}
+}
+
+// TestNotifyConfigTemplateInitialRender 驗證新帳號首次開啟通知配置頁（尚未存過設定）時，
+// toPublic(nil) 會回傳預設結構，讓頁面正確展示 placeholder 與 TG 電話未登入徽章。
+func TestNotifyConfigTemplateInitialRender(t *testing.T) {
+	tmpl, err := template.New("sk").Funcs(funcMap).ParseFS(tmplFS, "templates/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf strings.Builder
+	data := &pageData{
+		SiteName: "SimKeeper", Title: "通知配置", CSRFToken: "tok", Year: 2026,
+		User:    &store.User{Username: "admin"},
+		Content: map[string]any{"Cfg": toPublic(nil)},
+	}
+	if err := tmpl.ExecuteTemplate(&buf, "page_notify_config", data); err != nil {
+		t.Fatalf("渲染失敗: %v", err)
+	}
+	html := buf.String()
+	for _, probe := range []string{`value="587"`, "未登录", "多数服务商要求应用专用密码", "保号提醒"} {
+		if !strings.Contains(html, probe) {
+			t.Errorf("初次開啟通知配置頁缺少預期元素 %q", probe)
+		}
 	}
 }

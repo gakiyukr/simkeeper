@@ -21,14 +21,14 @@ type ColumnSpec struct {
 // 新库由 schema 建全，本列表为空操作；旧库逐列补齐。
 var notificationConfigColumns = []ColumnSpec{
 	{Name: "feishu_enabled", SQLiteType: "INTEGER NOT NULL DEFAULT 0", MySQLType: "TINYINT(1) NOT NULL DEFAULT 0", PGType: "INT NOT NULL DEFAULT 0"},
-	{Name: "feishu_webhook", SQLiteType: "TEXT", MySQLType: "VARCHAR(255)", PGType: "TEXT"},
-	{Name: "feishu_secret", SQLiteType: "TEXT", MySQLType: "VARCHAR(255)", PGType: "TEXT"},
+	{Name: "feishu_webhook", SQLiteType: "TEXT", MySQLType: "TEXT", PGType: "TEXT"},
+	{Name: "feishu_secret", SQLiteType: "TEXT", MySQLType: "TEXT", PGType: "TEXT"},
 	{Name: "dingtalk_enabled", SQLiteType: "INTEGER NOT NULL DEFAULT 0", MySQLType: "TINYINT(1) NOT NULL DEFAULT 0", PGType: "INT NOT NULL DEFAULT 0"},
-	{Name: "dingtalk_webhook", SQLiteType: "TEXT", MySQLType: "VARCHAR(255)", PGType: "TEXT"},
-	{Name: "dingtalk_secret", SQLiteType: "TEXT", MySQLType: "VARCHAR(255)", PGType: "TEXT"},
+	{Name: "dingtalk_webhook", SQLiteType: "TEXT", MySQLType: "TEXT", PGType: "TEXT"},
+	{Name: "dingtalk_secret", SQLiteType: "TEXT", MySQLType: "TEXT", PGType: "TEXT"},
 	{Name: "tgcall_enabled", SQLiteType: "INTEGER NOT NULL DEFAULT 0", MySQLType: "TINYINT(1) NOT NULL DEFAULT 0", PGType: "INT NOT NULL DEFAULT 0"},
 	{Name: "tgcall_api_id", SQLiteType: "INTEGER", MySQLType: "INT", PGType: "INT"},
-	{Name: "tgcall_api_hash", SQLiteType: "TEXT", MySQLType: "VARCHAR(255)", PGType: "TEXT"},
+	{Name: "tgcall_api_hash", SQLiteType: "TEXT", MySQLType: "TEXT", PGType: "TEXT"},
 	{Name: "tgcall_phone", SQLiteType: "TEXT", MySQLType: "VARCHAR(32)", PGType: "TEXT"},
 	{Name: "tgcall_session", SQLiteType: "TEXT", MySQLType: "TEXT", PGType: "TEXT"},
 	{Name: "tgcall_target", SQLiteType: "TEXT", MySQLType: "VARCHAR(64)", PGType: "TEXT"},
@@ -53,7 +53,7 @@ var notificationColumns = []ColumnSpec{
 
 // userColumns users 表的历史演进列。
 var userColumns = []ColumnSpec{
-	{Name: "totp_secret", SQLiteType: "TEXT", MySQLType: "VARCHAR(64)", PGType: "TEXT"},
+	{Name: "totp_secret", SQLiteType: "TEXT", MySQLType: "TEXT", PGType: "TEXT"},
 	{Name: "totp_enabled", SQLiteType: "INTEGER NOT NULL DEFAULT 0", MySQLType: "TINYINT(1) NOT NULL DEFAULT 0", PGType: "INT NOT NULL DEFAULT 0"},
 }
 
@@ -96,7 +96,8 @@ func (d *DB) existingColumns(table string) (map[string]bool, error) {
 		return out, rows.Err()
 	default: // postgres
 		rows, err := d.DB.Query(
-			`SELECT column_name FROM information_schema.columns WHERE table_name = ?`, table)
+			`SELECT column_name FROM information_schema.columns
+			 WHERE table_schema = current_schema() AND table_name = $1`, table)
 		if err != nil {
 			return nil, err
 		}
@@ -158,7 +159,52 @@ func (d *DB) migrateExtra() error {
 	if _, err := d.ensureColumns("notification_configs", notificationConfigColumns); err != nil {
 		return err
 	}
-	return d.relaxPeriodCheck()
+	if err := d.relaxPeriodCheck(); err != nil {
+		return err
+	}
+	return d.widenMySQLSecretColumns()
+}
+
+// mysqlEncryptedColumns 需要存放 AES-256-GCM 密文（enc:v1:...）的 MySQL 欄位清單。
+// 舊版 schema 使用 VARCHAR(64)/VARCHAR(255)，在 Strict Mode 下加密 TOTP 密鑰（87 字元）
+// 或較長 Webhook 時會超出長度限制，升級時統一擴充為 TEXT。
+var mysqlEncryptedColumns = []struct {
+	table, column string
+}{
+	{"users", "totp_secret"},
+	{"notification_configs", "email_password"},
+	{"notification_configs", "telegram_bot_token"},
+	{"notification_configs", "wxpusher_app_token"},
+	{"notification_configs", "feishu_webhook"},
+	{"notification_configs", "feishu_secret"},
+	{"notification_configs", "dingtalk_webhook"},
+	{"notification_configs", "dingtalk_secret"},
+	{"notification_configs", "tgcall_api_hash"},
+}
+
+// widenMySQLSecretColumns 針對舊 MySQL 資料庫，將存放密文的 VARCHAR 欄位升級為 TEXT（冪等）。
+func (d *DB) widenMySQLSecretColumns() error {
+	if d.Dialect.Name != DialectMySQL {
+		return nil
+	}
+	for _, target := range mysqlEncryptedColumns {
+		var dataType string
+		err := d.DB.QueryRow(
+			`SELECT DATA_TYPE FROM information_schema.COLUMNS
+			 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+			target.table, target.column,
+		).Scan(&dataType)
+		if err != nil {
+			continue
+		}
+		if strings.EqualFold(dataType, "varchar") {
+			q := "ALTER TABLE " + target.table + " MODIFY COLUMN " + target.column + " TEXT NULL"
+			if _, err := d.DB.Exec(q); err != nil {
+				return fmt.Errorf("擴充 MySQL 欄位 %s.%s 為 TEXT 失敗: %w", target.table, target.column, err)
+			}
+		}
+	}
+	return nil
 }
 
 // relaxPeriodCheck 放宽 phone_numbers.auto_expiry_period 的 CHECK 约束：

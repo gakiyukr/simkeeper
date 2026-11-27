@@ -39,7 +39,7 @@ func (a *App) HandleAdminHome(w http.ResponseWriter, r *http.Request) {
 
 	_ = a.DB.QueryRow(`SELECT COUNT(*) FROM phone_numbers WHERE status='active'`).Scan(&stats.Numbers)
 	_ = a.DB.QueryRow(
-		`SELECT COUNT(*) FROM phone_numbers WHERE status='active' AND expiry_date >= ? AND expiry_date <= ?`,
+		`SELECT COUNT(*) FROM phone_numbers WHERE status='active' AND no_keepalive = 0 AND expiry_date >= ? AND expiry_date <= ?`,
 		today.Format(dateLayout), today.AddDate(0, 0, 7).Format(dateLayout),
 	).Scan(&stats.Expiring7)
 	_ = a.DB.QueryRow(`SELECT setting_value FROM system_settings WHERE setting_key='total_sent'`).Scan(&stats.SentTotal)

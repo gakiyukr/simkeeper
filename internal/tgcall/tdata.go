@@ -6,7 +6,6 @@ package tgcall
 import (
 	"archive/zip"
 	"bytes"
-	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -15,6 +14,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gotd/td/crypto"
 	"github.com/gotd/td/session"
 	"github.com/gotd/td/session/tdesktop"
 )
@@ -98,25 +98,33 @@ func locateTDataRoot(zr *zip.Reader) (fs.FS, error) {
 	return fs.Sub(zr, found[0].prefix)
 }
 
-// accountToSession 把 tdesktop 账号转成 gotd 会话存储格式（base64 的版本化 JSON）。
+// accountToSession 把 tdesktop 帳號轉成 gotd 會話儲存格式（base64 的版本化 JSON）。
+// 優先使用 gotd 官方的 session.TDesktopSession 轉換（自動計算正確的 8 位元組
+// MTProto auth_key_id = SHA1(auth_key)[12:20] 並補齊 DC 位址與選項）；
+// 僅在 MainDC 缺少對應密鑰時退回任一可用密鑰。
 func accountToSession(a tdesktop.Account) (string, error) {
-	key, ok := a.Authorization.Keys[a.Authorization.MainDC]
-	if !ok {
-		// MainDC 没有对应密钥时退回任一可用密钥（gotd 连上后会自行校正 DC）
-		for _, k := range a.Authorization.Keys {
-			key = k
-			ok = true
+	var data session.Data
+	if converted, err := session.TDesktopSession(a); err == nil {
+		data = *converted
+	} else {
+		var (
+			dcID int
+			key  crypto.Key
+			ok   bool
+		)
+		for id, k := range a.Authorization.Keys {
+			dcID, key, ok = id, k, true
 			break
 		}
-	}
-	if !ok {
-		return "", fmt.Errorf("tdata 里没有可用的授权密钥")
-	}
-	keyID := sha1.Sum(key[:]) // MTProto auth_key_id = SHA1(auth_key) 的前 12 字节
-	data := session.Data{
-		DC:        a.Authorization.MainDC,
-		AuthKey:   key[:],
-		AuthKeyID: keyID[:12],
+		if !ok {
+			return "", fmt.Errorf("tdata 里没有可用的授权密钥")
+		}
+		keyID := key.ID() // MTProto auth_key_id = SHA1(auth_key) 的最後 8 位元組
+		data = session.Data{
+			DC:        dcID,
+			AuthKey:   key[:],
+			AuthKeyID: keyID[:],
+		}
 	}
 	buf, err := json.Marshal(sessionJSON{Version: 1, Data: data})
 	if err != nil {

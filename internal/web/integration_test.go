@@ -496,3 +496,234 @@ func TestHTTPDashboardShowsAllNumbers(t *testing.T) {
 		}
 	}
 }
+
+// TestHTTPMobileBackdropAndFlashOnce 驗證行動端遮罩點擊能正確關閉，
+// 且 Flash 提示僅顯示一次（消費後即清除 Cookie，重整不會重複出現）。
+func TestHTTPMobileBackdropAndFlashOnce(t *testing.T) {
+	a := integrationApp(t)
+	mustAdmin(t, a)
+	srv, c := newTestServer(t, a)
+	loginAdmin(t, c, srv.URL)
+
+	// 觸發一次會寫入 Flash 的操作（儲存系統設定）
+	tok := getCSRF(t, c, srv.URL, "/admin")
+	code, _ := postForm(t, c, srv.URL, "/admin/settings", url.Values{
+		"site_name": {"SimKeeper"}, "log_retention_days": {"90"}, "csrf_token": {tok},
+	})
+	if code != 303 {
+		t.Fatalf("儲存設定應 303, got %d", code)
+	}
+
+	readPage := func(path string) string {
+		resp, err := c.Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return string(b)
+	}
+
+	first := readPage("/admin")
+	if !strings.Contains(first, "设置已保存") {
+		t.Error("首次渲染應顯示 Flash 提示")
+	}
+	if !strings.Contains(first, "bd.addEventListener('click',function(){sb.classList.remove('open');bd.classList.remove('show')})") {
+		t.Error("行動端點擊遮罩應移除 show 樣式")
+	}
+	second := readPage("/admin")
+	if strings.Contains(second, "设置已保存") {
+		t.Error("Flash 提示消費後不應在重整頁面時重複顯示")
+	}
+}
+
+// TestHTTPExpiring7ConsistencyAndCSVNoKeepalive 驗證首頁與後台的「7 天內到期」
+// 統計口徑一致（同時排除已終止與無需保號號碼），且 CSV 回導更新時保留 NoKeepalive。
+func TestHTTPExpiring7ConsistencyAndCSVNoKeepalive(t *testing.T) {
+	a := integrationApp(t)
+	mustAdmin(t, a)
+	soon := time.Now().AddDate(0, 0, 3).Format("2006-01-02")
+
+	// 1. 正常 3 天後到期（應計入）
+	if _, err := a.Numbers.Create(&store.PhoneNumber{
+		UserID: 1, PhoneNumber: "+819011111111", CountryCode: "JP", CountryName: "日本",
+		Carrier: "KDDI", ExpiryDate: soon, Status: "active", RenewalDaysBefore: 7,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// 2. 已終止但到期日在 3 天內（不應計入）
+	if _, err := a.Numbers.Create(&store.PhoneNumber{
+		UserID: 1, PhoneNumber: "+819022222222", CountryCode: "JP", CountryName: "日本",
+		Carrier: "KDDI", ExpiryDate: soon, Status: "inactive", RenewalDaysBefore: 7,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// 3. 無需保號但庫內到期日在 3 天內（不應計入，且 CSV 回導後仍保持無需保號）
+	if _, err := a.Numbers.Create(&store.PhoneNumber{
+		UserID: 1, PhoneNumber: "+819033333333", CountryCode: "JP", CountryName: "日本",
+		Carrier: "KDDI", ExpiryDate: soon, Status: "active", NoKeepalive: true, RenewalDaysBefore: 7,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	srv, c := newTestServer(t, a)
+	loginAdmin(t, c, srv.URL)
+
+	// 檢查首頁與後台渲染出的「7 天內到期」統計一致（皆應為 1），
+	// 且首頁「使用中」應包含使用中的無需保號號碼（共 2 個）
+	const wantCard = `<div class="stat-label">7 天内到期</div><div class="stat-num warn">1</div>`
+	const wantActiveCard = `<div class="stat-label">使用中</div><div class="stat-num ok">2</div>`
+	for _, path := range []string{"/", "/admin"} {
+		resp, err := c.Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if !strings.Contains(string(b), wantCard) {
+			t.Errorf("%s 的 7 天內到期統計不為 1（應排除已終止與無需保號號碼）", path)
+		}
+		if path == "/" && !strings.Contains(string(b), wantActiveCard) {
+			t.Errorf("首頁「使用中」統計應包含使用中的無需保號號碼（want 2）")
+		}
+	}
+
+	resp, err := c.Get(srv.URL + "/admin/export?format=csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	csvRaw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	// CSV 回導後，+819033333333 必須保留 NoKeepalive = true
+	tok := getCSRF(t, c, srv.URL, "/admin")
+	code, body := postMultipart(t, c, srv.URL, "/admin/import", "numbers.csv", csvRaw,
+		url.Values{"csrf_token": {tok}})
+	if code != 303 {
+		t.Fatalf("CSV 回導應 303, got %d %s", code, body)
+	}
+	n3, err := a.Numbers.ByPhone(1, "+819033333333")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !n3.NoKeepalive {
+		t.Error("CSV 回導更新既有號碼後，不應遺失 NoKeepalive 標記")
+	}
+}
+
+// TestHTTPForgotGenericRedirect 驗證 POST /forgot 僅送出單一 303 重定向，
+// 無論信箱是否存在或未配置郵件皆不出現二次 WriteHeader。
+func TestHTTPForgotGenericRedirect(t *testing.T) {
+	a := integrationApp(t)
+	mustAdmin(t, a)
+	srv, c := newTestServer(t, a)
+
+	tok := getCSRF(t, c, srv.URL, "/forgot")
+	code, body := postForm(t, c, srv.URL, "/forgot", url.Values{
+		"email": {"admin@test.local"}, "csrf_token": {tok},
+	})
+	if code != 303 {
+		t.Fatalf("POST /forgot 應回傳 303, got %d %s", code, body)
+	}
+}
+
+// TestHTTPTOTPRateLimitNotResetByPassword 回歸安全測試：啟用 TOTP 時，
+// 正確密碼驗證不應提前清空 IP 限流計數，防止攻擊者重複送密碼重置計數以高速窮舉 TOTP；
+// 同時驗證 SecureCookies 開啟時 SKTOTP 具備 Secure 旗標。
+func TestHTTPTOTPRateLimitNotResetByPassword(t *testing.T) {
+	a := integrationApp(t)
+	a.SecureCookies = true
+	mustAdmin(t, a)
+	sec, err := auth.GenerateTOTPSecret()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Users.SetTOTP(1, sec, true); err != nil {
+		t.Fatal(err)
+	}
+	srv, c := newTestServer(t, a)
+
+	// 直接使用原始請求（因 httptest 為 http，cookiejar 不會將 Secure Cookie 送回 http，
+	// 我們手動攜帶並檢查 Cookie 的 Secure 旗標）
+	resp, err := c.Get(srv.URL + "/login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	loginBody, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	m := csrfRe.FindSubmatch(loginBody)
+	if m == nil {
+		t.Fatal("缺少 CSRF token")
+	}
+	tok := string(m[1])
+	var sessCookie *http.Cookie
+	for _, ck := range resp.Cookies() {
+		if ck.Name == "SKSESSION" {
+			sessCookie = ck
+		}
+	}
+	if sessCookie == nil || !sessCookie.Secure {
+		t.Fatalf("SKSESSION 應帶 Secure 旗標: %+v", sessCookie)
+	}
+
+	doPost := func(path string, form url.Values, cookies ...*http.Cookie) (*http.Response, string) {
+		req, err := http.NewRequest("POST", srv.URL+path, strings.NewReader(form.Encode()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		for _, ck := range cookies {
+			if ck != nil {
+				req.AddCookie(ck)
+			}
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		return res, string(b)
+	}
+
+	// 1. 送正確密碼取得 SKTOTP
+	r1, _ := doPost("/login", url.Values{
+		"username": {"admin"}, "password": {"password123"}, "csrf_token": {tok},
+	}, sessCookie)
+	var totpCookie *http.Cookie
+	for _, ck := range r1.Cookies() {
+		if ck.Name == "SKTOTP" {
+			totpCookie = ck
+		}
+	}
+	if totpCookie == nil || !totpCookie.Secure {
+		t.Fatalf("SKTOTP 應存在並帶 Secure 旗標: %+v", totpCookie)
+	}
+
+	// 2. 猜錯 4 次 TOTP（確保使用的測試碼非當前有效碼，避免極低機率隨機撞碼）
+	badCode := "000000"
+	if auth.VerifyTOTP(sec, badCode) {
+		badCode = "111111"
+	}
+	for i := 0; i < 4; i++ {
+		r, _ := doPost("/login/totp", url.Values{"code": {badCode}, "csrf_token": {tok}}, sessCookie, totpCookie)
+		if r.StatusCode != 401 {
+			t.Fatalf("第 %d 次錯誤 TOTP 應 401, got %d", i+1, r.StatusCode)
+		}
+	}
+
+	// 3. 嘗試再次以正確密碼 POST /login：不應重置 IP 失敗計數
+	rAgain, _ := doPost("/login", url.Values{
+		"username": {"admin"}, "password": {"password123"}, "csrf_token": {tok},
+	}, sessCookie)
+	if rAgain.StatusCode != 200 {
+		t.Fatalf("累計 4 次失敗時尚可進入 TOTP 步驟, got %d", rAgain.StatusCode)
+	}
+
+	// 4. 再猜錯第 5 次，接著第 6 次必須被限流攔截
+	_, _ = doPost("/login/totp", url.Values{"code": {badCode}, "csrf_token": {tok}}, sessCookie, totpCookie)
+	rBlocked, bodyBlocked := doPost("/login/totp", url.Values{"code": {badCode}, "csrf_token": {tok}}, sessCookie, totpCookie)
+	if rBlocked.StatusCode != 401 || !strings.Contains(bodyBlocked, "尝试次数过多") {
+		t.Fatalf("累計滿 5 次後應觸發限流（不可被重複密碼提交重置）, got %d %q", rBlocked.StatusCode, bodyBlocked)
+	}
+}

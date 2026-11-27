@@ -78,7 +78,7 @@ function skTheme(){
   var sb=document.getElementById('sidebar'),bd=document.getElementById('backdrop');
   if(!sb)return;
   document.getElementById('sb-toggle').addEventListener('click',function(){sb.classList.add('open');bd.classList.add('show')});
-  bd.addEventListener('click',function(){sb.classList.remove('open');bd.classList.add('show')});
+  bd.addEventListener('click',function(){sb.classList.remove('open');bd.classList.remove('show')});
 })();
 </script>
 </body>

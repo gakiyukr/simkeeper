@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
     email         VARCHAR(100) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     role          VARCHAR(16)  NOT NULL DEFAULT 'user',
-    totp_secret   VARCHAR(64)  NULL,            -- TOTP 两步验证密钥（Base32）；空 = 未设置
+    totp_secret   TEXT         NULL,            -- TOTP 兩步驗證密鑰（enc:v1: 密文）；空 = 未設定
     totp_enabled  TINYINT(1)   NOT NULL DEFAULT 0, -- 验证器确认后置 1
     status        VARCHAR(16)  NOT NULL DEFAULT 'active',
     created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -84,23 +84,23 @@ CREATE TABLE IF NOT EXISTS notification_configs (
     email_smtp_username VARCHAR(100) NULL,
     email_from_email   VARCHAR(100) NULL,
     email_from_name    VARCHAR(100) NULL,
-    email_password     VARCHAR(255) NULL,
+    email_password     TEXT         NULL,
     email_to_email     VARCHAR(100) NULL,               -- 收件地址；空则回退用户邮箱
     telegram_enabled   TINYINT(1)   NOT NULL DEFAULT 0,
-    telegram_bot_token VARCHAR(255) NULL,
+    telegram_bot_token TEXT         NULL,
     telegram_chat_id   VARCHAR(100) NULL,
     wxpusher_enabled   TINYINT(1)   NOT NULL DEFAULT 0,
-    wxpusher_app_token VARCHAR(255) NULL,
+    wxpusher_app_token TEXT         NULL,
     wxpusher_uid       VARCHAR(100) NULL,
     feishu_enabled     TINYINT(1)   NOT NULL DEFAULT 0, -- 飞书群自定义机器人
-    feishu_webhook     VARCHAR(255) NULL,
-    feishu_secret      VARCHAR(255) NULL,               -- 加签密钥（机器人未开签名则留空）
+    feishu_webhook     TEXT         NULL,
+    feishu_secret      TEXT         NULL,               -- 加签密钥（机器人未开签名则留空）
     dingtalk_enabled   TINYINT(1)   NOT NULL DEFAULT 0, -- 钉钉群自定义机器人
-    dingtalk_webhook   VARCHAR(255) NULL,
-    dingtalk_secret    VARCHAR(255) NULL,               -- 加签密钥（关键词/IP 白名单模式则留空）
+    dingtalk_webhook   TEXT         NULL,
+    dingtalk_secret    TEXT         NULL,               -- 加签密钥（关键词/IP 白名单模式则留空）
     tgcall_enabled     TINYINT(1)   NOT NULL DEFAULT 0, -- TG 未接来电闹铃（MTProto 用户账号）
     tgcall_api_id      INT          NULL,               -- my.telegram.org 的 api_id
-    tgcall_api_hash    VARCHAR(255) NULL,               -- api_hash
+    tgcall_api_hash    TEXT         NULL,               -- api_hash
     tgcall_phone       VARCHAR(32)  NULL,               -- 系统 TG 账号手机号
     tgcall_session     TEXT         NULL,               -- 登录会话（base64，由 tg-login 写入）
     tgcall_target      VARCHAR(64)  NULL,               -- 被叫账号（@用户名 或手机号）

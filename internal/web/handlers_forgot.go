@@ -27,7 +27,10 @@ func (a *App) HandleForgot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email := strings.TrimSpace(r.PostFormValue("email"))
-	a.forgotGeneric(w, r)
+	// 統一透過 defer 回傳一致的 303 重定向，既避免暴露帳號存在性，
+	// 亦避免先寫入 303 後又因內部錯誤二次呼叫 http.Error。
+	defer a.forgotGeneric(w, r)
+
 	if !emailRe.MatchString(email) {
 		return
 	}
@@ -37,7 +40,7 @@ func (a *App) HandleForgot(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg, err := a.Notify.ConfigForUser(u.ID)
 	if err != nil {
-		http.Error(w, "内部错误", http.StatusInternalServerError)
+		log.Printf("[web] 找回密碼讀取通知配置失敗（用戶 %d）: %v", u.ID, err)
 		return
 	}
 	if cfg.IsZero() || !cfg.EmailEnabled || cfg.EmailSMTPHost == "" || cfg.EmailFromEmail == "" {
@@ -52,11 +55,11 @@ func (a *App) HandleForgot(w http.ResponseWriter, r *http.Request) {
 	}
 	token, hash, err := store.NewResetToken()
 	if err != nil {
-		http.Error(w, "内部错误", http.StatusInternalServerError)
+		log.Printf("[web] 生成重置令牌失敗（用戶 %d）: %v", u.ID, err)
 		return
 	}
 	if err := a.Resets.Create(u.ID, hash, now.Add(time.Hour)); err != nil {
-		http.Error(w, "内部错误", http.StatusInternalServerError)
+		log.Printf("[web] 寫入重置令牌失敗（用戶 %d）: %v", u.ID, err)
 		return
 	}
 
